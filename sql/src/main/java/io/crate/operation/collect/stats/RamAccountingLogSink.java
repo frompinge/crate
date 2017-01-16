@@ -49,13 +49,6 @@ public abstract class RamAccountingLogSink<T> implements LogSink<T> {
     }
 
     @Override
-    public void addAll(Iterable<T> iterable) {
-        for (T t : iterable) {
-            add(t);
-        }
-    }
-
-    @Override
     public Iterator<T> iterator() {
         return queue.iterator();
     }

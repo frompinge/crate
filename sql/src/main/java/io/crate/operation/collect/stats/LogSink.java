@@ -26,8 +26,10 @@ public interface LogSink<T> extends Iterable<T> {
 
     void add(T item);
 
-    void addAll(Iterable<T> iterable);
+    default void addAll(Iterable<T> iterable) {
+        iterable.forEach(this::add);
+    }
 
-    void close();
-
+    default void close() {
+    }
 }

@@ -43,15 +43,6 @@ public class NoopLogSink<T extends ContextLog> implements LogSink<T> {
     public void add(T item) {
     }
 
-    @Override
-    public void addAll(Iterable<T> iterable) {
-    }
-
-    @Override
-    public void close() {
-    }
-
-    @Override
     public Iterator<T> iterator() {
         return Collections.emptyIterator();
     }
