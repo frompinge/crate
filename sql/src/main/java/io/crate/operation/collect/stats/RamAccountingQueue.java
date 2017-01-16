@@ -22,47 +22,47 @@
 
 package io.crate.operation.collect.stats;
 
-import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ForwardingQueue;
 import io.crate.breaker.RamAccountingContext;
+import io.crate.breaker.SizeEstimator;
 
-import java.util.Iterator;
+import java.util.NoSuchElementException;
 import java.util.Queue;
-import java.util.function.Function;
 
-/**
- * A LogSink that accounts memory to circuit breaker when adding items.
- * The sink accepts a queue implementation and a ram accounting context.
- * The queue maintains that list of items.
- * The ram accounting context takes care of the used bytes for the circuit breaker.
- * @param <T> Type of the items in the sink.
- */
-public abstract class RamAccountingLogSink<T> implements LogSink<T> {
+public class RamAccountingQueue<T> extends ForwardingQueue<T> {
 
-    final Queue<T> queue;
-    final RamAccountingContext context;
-    final Function<T, Long> estimatorFunction;
+    private final Queue<T> delegate;
+    private final RamAccountingContext context;
+    private final SizeEstimator<T> sizeEstimator;
 
-    RamAccountingLogSink(Queue<T> queue, RamAccountingContext context, Function<T, Long> estimatorFunction) {
-        this.queue = queue;
+    public RamAccountingQueue(Queue<T> delegate, RamAccountingContext context, SizeEstimator<T> sizeEstimator) {
+        this.delegate = delegate;
         this.context = context;
-        this.estimatorFunction = estimatorFunction;
+        this.sizeEstimator = sizeEstimator;
     }
 
     @Override
-    public Iterator<T> iterator() {
-        return queue.iterator();
-    }
-
-    @Override
-    public void close() {
-        for (T t : queue) {
-            context.addBytesWithoutBreaking(-estimatorFunction.apply(t));
+    public boolean offer(T o) {
+        context.addBytesWithoutBreaking(sizeEstimator.estimateSize(o));
+        if (context.exceededBreaker()) {
+            try {
+                delegate.remove();
+            } catch (NoSuchElementException ignored) {
+                // queue empty
+            }
         }
-        queue.clear();
+        return delegate.offer(o);
     }
 
-    @VisibleForTesting
-    int size() {
-        return queue.size();
+    @Override
+    protected Queue<T> delegate() {
+        return delegate;
+    }
+
+    public void close() {
+        for (T t : delegate) {
+            context.addBytesWithoutBreaking(-sizeEstimator.estimateSize(t));
+        }
+        delegate.clear();
     }
 }
