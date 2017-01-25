@@ -54,7 +54,8 @@ public final class GeoHashFunction {
 
 
     private static BytesRef getGeoHash(Object value) {
-        return BytesRefs.toBytesRef(GeoHashUtils.stringEncode(GeoPointType.INSTANCE.value(value)[0], GeoPointType.INSTANCE.value(value)[1]));
+        Double[] geoValue = GeoPointType.INSTANCE.value(value);
+        return BytesRefs.toBytesRef(GeoHashUtils.stringEncode(geoValue[0], geoValue[1]));
     }
 }
 
