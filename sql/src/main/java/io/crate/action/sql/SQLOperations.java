@@ -280,7 +280,8 @@ public class SQLOperations {
                     clearState();
                     ListenableFuture<?> result = portal.sync(planner, statsTables);
                     if (UNNAMED.equals(portal.name())) {
-                        portal.close();
+                        // simple statement must not allow 2nd bind() call after sync()
+                        portal.lock();
                     }
                     return result;
             }

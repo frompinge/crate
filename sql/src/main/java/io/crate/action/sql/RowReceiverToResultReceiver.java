@@ -32,6 +32,7 @@ public class RowReceiverToResultReceiver implements RowReceiver {
     private ResultReceiver resultReceiver;
     private int maxRows;
     private long rowCount = 0;
+    private volatile boolean interrupted = false;
 
     private ResumeHandle resumeHandle = null;
 
@@ -42,6 +43,10 @@ public class RowReceiverToResultReceiver implements RowReceiver {
 
     @Override
     public Result setNextRow(Row row) {
+        if (interrupted) {
+            return Result.STOP;
+        }
+
         rowCount++;
         resultReceiver.setNextRow(row);
 
@@ -70,6 +75,15 @@ public class RowReceiverToResultReceiver implements RowReceiver {
     @Override
     public void kill(Throwable throwable) {
         fail(throwable);
+    }
+
+    public void interrupt() {
+        if (!interrupted) {
+            interrupted = true;
+            if (resumeHandle != null) {
+                resumeHandle.resume(false);
+            }
+        }
     }
 
     @Override

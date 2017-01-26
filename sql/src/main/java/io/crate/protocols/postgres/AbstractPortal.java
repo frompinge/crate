@@ -33,6 +33,7 @@ abstract class AbstractPortal implements Portal {
     protected final String name;
     protected final PortalContext portalContext;
     final SessionContext sessionContext;
+    private boolean locked = false;
 
     AbstractPortal(String name, Analyzer analyzer, Executor executor, boolean isReadOnly, SessionContext sessionContext) {
         this.name = name;
@@ -53,6 +54,16 @@ abstract class AbstractPortal implements Portal {
 
     @Override
     public void close() {
+    }
+
+    @Override
+    public void lock() {
+        this.locked = true;
+    }
+
+    @Override
+    public boolean locked() {
+        return locked;
     }
 
     @Override

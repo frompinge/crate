@@ -37,6 +37,7 @@ import io.crate.analyze.symbol.Symbols;
 import io.crate.core.collections.Row;
 import io.crate.core.collections.RowN;
 import io.crate.exceptions.Exceptions;
+import io.crate.exceptions.PortalAlreadyBoundException;
 import io.crate.exceptions.ReadOnlyException;
 import io.crate.executor.Executor;
 import io.crate.operation.collect.stats.StatsTables;
@@ -104,6 +105,9 @@ public class SimplePortal extends AbstractPortal {
                        List<Object> params,
                        @Nullable FormatCodes.FormatCode[] resultFormatCodes) {
 
+        if (locked()) {
+            throw new PortalAlreadyBoundException();
+        }
         if (statement.equals(this.statement)) {
             if (portalContext.isReadOnly()) { // Cannot have a bulk operation in read only mode
                 throw new ReadOnlyException();
@@ -180,7 +184,7 @@ public class SimplePortal extends AbstractPortal {
                 sessionContext);
         }
         if (!resumeIfSuspended()) {
-            this.rowReceiver = new RowReceiverToResultReceiver(resultReceiver, maxRows);
+            rowReceiver = new RowReceiverToResultReceiver(resultReceiver, maxRows);
             portalContext.getExecutor().execute(plan, rowReceiver, this.rowParams);
         }
         return resultReceiver.completionFuture();
@@ -189,11 +193,7 @@ public class SimplePortal extends AbstractPortal {
     @Override
     public void close() {
         if (rowReceiver != null) {
-            ResumeHandle resumeHandle = rowReceiver.resumeHandle();
-            if (resumeHandle != null) {
-                rowReceiver.kill(new InterruptedException("Client closed portal"));
-                resumeHandle.resume(false);
-            }
+            rowReceiver.interrupt();
         }
     }
 

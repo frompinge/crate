@@ -20,42 +20,18 @@
  * agreement.
  */
 
-package io.crate.protocols.postgres;
+package io.crate.exceptions;
 
-import com.google.common.util.concurrent.ListenableFuture;
-import io.crate.action.sql.ResultReceiver;
-import io.crate.analyze.symbol.Field;
-import io.crate.operation.collect.stats.StatsTables;
-import io.crate.planner.Planner;
-import io.crate.sql.tree.Statement;
-import io.crate.types.DataType;
+public class PortalAlreadyBoundException extends RuntimeException implements CrateException {
 
-import javax.annotation.Nullable;
-import java.util.List;
+    private static final String MESSAGE = "Bind has been called on alreadt locked portal.";
 
-public interface Portal {
+    public PortalAlreadyBoundException() {
+        super(MESSAGE);
+    }
 
-    String name();
-
-    FormatCodes.FormatCode[] getLastResultFormatCodes();
-
-    List<? extends DataType> getLastOutputTypes();
-
-    String getLastQuery();
-
-    Portal bind(String statementName, String query, Statement statement,
-                List<Object> params, @Nullable FormatCodes.FormatCode[] resultFormatCodes);
-
-    List<Field> describe();
-
-    void execute(ResultReceiver resultReceiver, int maxRows);
-
-    ListenableFuture<?> sync(Planner planner, StatsTables statsTables);
-
-    void close();
-
-    void lock();
-
-    boolean locked();
-
+    @Override
+    public int errorCode() {
+        return 0;
+    }
 }

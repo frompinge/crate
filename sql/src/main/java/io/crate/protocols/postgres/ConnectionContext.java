@@ -298,7 +298,9 @@ class ConnectionContext {
                         case 'C':
                             handleClose(buffer, channel);
                             return;
-                        case 'X': // Terminate
+                        case 'X': // Terminate (called when jdbc connection is closed)
+                            closeSession();
+                            Messages.sendCloseComplete(channel);
                             channel.close();
                             return;
                         default:

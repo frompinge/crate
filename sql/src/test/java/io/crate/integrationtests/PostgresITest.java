@@ -51,7 +51,8 @@ public class PostgresITest extends SQLTransportIntegrationTest {
     protected Settings nodeSettings(int nodeOrdinal) {
         Settings.Builder builder = Settings.builder();
         builder.put(super.nodeSettings(nodeOrdinal))
-            .put("network.host", "127.0.0.1");
+            .put("network.host", "127.0.0.1")
+            .put("stats.enabled", true);
 
         if ((nodeOrdinal + 1) % 2 == 0) {
             builder.put("psql.port", "4242");
@@ -295,6 +296,31 @@ public class PostgresITest extends SQLTransportIntegrationTest {
                     assertThat(result, Matchers.contains(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19));
                 }
             }
+        }
+    }
+
+    @Test
+    public void testCloseUnfinishedResultSet() throws Exception {
+        try (Connection conn = DriverManager.getConnection(JDBC_CRATE_URL, properties)) {
+            conn.setAutoCommit(false);
+            try (Statement statement = conn.createStatement()) {
+                statement.setFetchSize(2);
+                try (ResultSet resultSet = statement.executeQuery("select mountain from sys.summits")) {
+                    resultSet.next();
+                    resultSet.next();
+                }
+            }
+        }
+        try (Connection conn = DriverManager.getConnection(JDBC_CRATE_URL, properties)) {
+            Statement statement = conn.createStatement();
+            ResultSet rs = statement.executeQuery("SELECT job_id, count(*) AS num_ops FROM sys.operations GROUP BY job_id");
+            int rowCount = 0;
+            while (rs.next()) {
+                rowCount++;
+                System.out.println(rs.getString(1));
+                System.out.println(rs.getInt(2));
+            }
+            assertThat(rowCount, is(1));
         }
     }
 
