@@ -22,8 +22,6 @@
 
 package io.crate.protocols.postgres;
 
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
 import io.crate.Constants;
 import io.crate.action.sql.ResultReceiver;
 import io.crate.action.sql.RowReceiverToResultReceiver;
@@ -34,6 +32,7 @@ import io.crate.analyze.ParameterContext;
 import io.crate.analyze.relations.AnalyzedRelation;
 import io.crate.analyze.symbol.Field;
 import io.crate.analyze.symbol.Symbols;
+import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Row;
 import io.crate.core.collections.RowN;
 import io.crate.exceptions.Exceptions;
@@ -54,6 +53,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 public class SimplePortal extends AbstractPortal {
 
@@ -156,7 +156,7 @@ public class SimplePortal extends AbstractPortal {
     }
 
     @Override
-    public ListenableFuture<?> sync(Planner planner, StatsTables statsTables) {
+    public CompletableFuture<?> sync(Planner planner, StatsTables statsTables) {
         UUID jobId = UUID.randomUUID();
         Plan plan;
         try {
@@ -166,8 +166,10 @@ public class SimplePortal extends AbstractPortal {
             throw t;
         }
         statsTables.logExecutionStart(jobId, query);
-
-        Futures.addCallback(resultReceiver.completionFuture(), new StatsTablesUpdateListener(jobId, statsTables));
+        StatsTablesUpdateListener statsTablesUpdateListener = new StatsTablesUpdateListener(jobId, statsTables);
+        resultReceiver.completionFuture().whenComplete(FutureCompleteConsumer.build(
+            statsTablesUpdateListener::onSuccess, statsTablesUpdateListener::onFailure
+        ));
 
         if (!analysis.analyzedStatement().isWriteOperation()) {
             resultReceiver = new ResultReceiverRetryWrapper(
@@ -287,7 +289,7 @@ public class SimplePortal extends AbstractPortal {
         }
 
         @Override
-        public ListenableFuture<?> completionFuture() {
+        public CompletableFuture<?> completionFuture() {
             return delegate.completionFuture();
         }
     }

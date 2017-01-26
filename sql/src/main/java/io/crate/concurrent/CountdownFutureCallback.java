@@ -22,11 +22,9 @@
 
 package io.crate.concurrent;
 
-import com.google.common.util.concurrent.AbstractFuture;
-import com.google.common.util.concurrent.FutureCallback;
-
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -34,7 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * A future acting as a FutureCallback. It is set when once numCalls have been made to the callback.
  * If a failure occurs the last failure will be used as exception. The result is always null.
  */
-public class CountdownFutureCallback extends AbstractFuture<Void> implements FutureCallback<Object> {
+public class CountdownFutureCallback extends CompletableFuture<Void> {
 
     private final AtomicInteger counter;
     private final AtomicReference<Throwable> lastFailure = new AtomicReference<>();
@@ -43,12 +41,10 @@ public class CountdownFutureCallback extends AbstractFuture<Void> implements Fut
         counter = new AtomicInteger(numCalls);
     }
 
-    @Override
     public void onSuccess(@Nullable Object result) {
         countdown();
     }
 
-    @Override
     public void onFailure(@Nonnull Throwable t) {
         lastFailure.set(t);
         countdown();
@@ -58,9 +54,9 @@ public class CountdownFutureCallback extends AbstractFuture<Void> implements Fut
         if (counter.decrementAndGet() == 0) {
             Throwable throwable = lastFailure.get();
             if (throwable == null) {
-                set(null);
+                complete(null);
             } else {
-                setException(throwable);
+                completeExceptionally(throwable);
             }
         }
     }

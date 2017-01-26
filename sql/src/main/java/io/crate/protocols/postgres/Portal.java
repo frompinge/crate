@@ -22,7 +22,6 @@
 
 package io.crate.protocols.postgres;
 
-import com.google.common.util.concurrent.ListenableFuture;
 import io.crate.action.sql.ResultReceiver;
 import io.crate.analyze.symbol.Field;
 import io.crate.operation.collect.stats.StatsTables;
@@ -32,6 +31,7 @@ import io.crate.types.DataType;
 
 import javax.annotation.Nullable;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public interface Portal {
 
@@ -50,7 +50,7 @@ public interface Portal {
 
     void execute(ResultReceiver resultReceiver, int maxRows);
 
-    ListenableFuture<?> sync(Planner planner, StatsTables statsTables);
+    CompletableFuture<?> sync(Planner planner, StatsTables statsTables);
 
     void close();
 }

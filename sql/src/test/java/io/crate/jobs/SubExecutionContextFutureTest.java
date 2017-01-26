@@ -22,13 +22,14 @@
 
 package io.crate.jobs;
 
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
+import io.crate.concurrent.CompletableFutures;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import static org.hamcrest.Matchers.isA;
 
@@ -48,7 +49,11 @@ public class SubExecutionContextFutureTest {
         // cancel on one future causes the other futures to be canceled too
         f1.close(new InterruptedException());
 
-        ListenableFuture<List<CompletionState>> asList = Futures.allAsList(f1, f2);
+        List<CompletableFuture<CompletionState>> futures = new ArrayList<>();
+        futures.add(f1);
+        futures.add(f2);
+
+        CompletableFuture<List<CompletionState>> asList = CompletableFutures.allSuccessfulOrFailedFuture(futures);
         asList.get();
     }
 }

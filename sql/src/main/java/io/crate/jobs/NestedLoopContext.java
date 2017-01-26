@@ -21,8 +21,7 @@
 
 package io.crate.jobs;
 
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
+import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.operation.join.NestedLoopOperation;
 import io.crate.operation.projectors.ListenableRowReceiver;
 import io.crate.planner.node.dql.join.NestedLoopPhase;
@@ -56,17 +55,10 @@ public class NestedLoopContext extends AbstractExecutionSubContext implements Do
         leftRowReceiver = nestedLoopOperation.leftRowReceiver();
         rightRowReceiver = nestedLoopOperation.rightRowReceiver();
 
-        Futures.addCallback(nestedLoopOperation.completionFuture(), new FutureCallback<Object>() {
-            @Override
-            public void onSuccess(@Nullable Object result) {
-                future.close(null);
-            }
-
-            @Override
-            public void onFailure(@Nonnull Throwable t) {
-                future.close(t);
-            }
-        });
+        nestedLoopOperation.completionFuture().whenComplete(FutureCompleteConsumer.build(
+            (@Nullable Object result) -> future.close(null),
+            (@Nonnull Throwable t) -> future.close(t)
+        ));
     }
 
     @Override

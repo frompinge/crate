@@ -23,7 +23,6 @@
 package io.crate.executor.transport;
 
 import com.google.common.base.Function;
-import com.google.common.util.concurrent.FutureCallback;
 import io.crate.core.collections.Row;
 import io.crate.operation.projectors.RepeatHandle;
 import io.crate.operation.projectors.RowReceiver;
@@ -32,7 +31,7 @@ import org.elasticsearch.action.ActionListener;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-public class OneRowActionListener<Response> implements ActionListener<Response>, FutureCallback<Response> {
+public class OneRowActionListener<Response> implements ActionListener<Response> {
 
     private final RowReceiver rowReceiver;
     private final Function<? super Response, ? extends Row> toRowFunction;
@@ -48,7 +47,6 @@ public class OneRowActionListener<Response> implements ActionListener<Response>,
         rowReceiver.finish(RepeatHandle.UNSUPPORTED);
     }
 
-    @Override
     public void onSuccess(@Nullable Response result) {
         onResponse(result);
     }

@@ -21,11 +21,9 @@
 
 package io.crate.executor.transport.task;
 
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.SettableFuture;
 import io.crate.Constants;
+import io.crate.concurrent.CompletableFutures;
+import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Row;
 import io.crate.core.collections.Row1;
 import io.crate.executor.Executor;
@@ -59,6 +57,7 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public class UpsertByIdTask extends JobTask {
 
@@ -101,7 +100,7 @@ public class UpsertByIdTask extends JobTask {
 
     @Override
     public void execute(final RowReceiver rowReceiver, Row parameters) {
-        ListenableFuture<Long> result;
+        CompletableFuture<Long> result;
         if (upsertById.items().size() > 1) {
             try {
                 result = executeBulkShardProcessor().get(0);
@@ -124,22 +123,17 @@ public class UpsertByIdTask extends JobTask {
                 return;
             }
         }
-        Futures.addCallback(result, new FutureCallback<Long>() {
-            @Override
-            public void onSuccess(@Nullable Long result) {
-                rowReceiver.setNextRow(new Row1(result));
+        result.whenComplete(FutureCompleteConsumer.build(
+            (@Nullable Long receivedResult) -> {
+                rowReceiver.setNextRow(new Row1(receivedResult));
                 rowReceiver.finish(RepeatHandle.UNSUPPORTED);
-            }
-
-            @Override
-            public void onFailure(@Nonnull Throwable t) {
-                rowReceiver.fail(t);
-            }
-        });
+            },
+            (@Nonnull Throwable t) -> rowReceiver.fail(t)
+        ));
     }
 
-    private List<SettableFuture<Long>> executeBulkShardProcessor() throws Throwable {
-        List<SettableFuture<Long>> resultList = initializeBulkShardProcessor(settings);
+    private List<CompletableFuture<Long>> executeBulkShardProcessor() throws Throwable {
+        List<CompletableFuture<Long>> resultList = initializeBulkShardProcessor(settings);
         assert bulkShardProcessorContext != null : "bulkShardProcessorContext must not be null";
         createJobExecutionContext(bulkShardProcessorContext);
         assert jobExecutionContext != null : "jobExecutionContext must not be null";
@@ -152,34 +146,25 @@ public class UpsertByIdTask extends JobTask {
         return resultList;
     }
 
-
     @Override
-    public ListenableFuture<List<Long>> executeBulk() {
+    public CompletableFuture<List<Long>> executeBulk() {
         try {
-            List<SettableFuture<Long>> resultList = executeBulkShardProcessor();
-            return Futures.allAsList(resultList);
+            List<CompletableFuture<Long>> resultList = executeBulkShardProcessor();
+            return CompletableFutures.allSuccessfulOrFailedFuture(resultList);
         } catch (Throwable throwable) {
-            return Futures.immediateFailedFuture(throwable);
+            return CompletableFutures.failedFuture(throwable);
         }
     }
 
-    private void executeUpsertRequest(final UpsertById.Item item, final SettableFuture<Long> future) {
-        final FutureCallback<Long> callback = new FutureCallback<Long>() {
-            @Override
-            public void onSuccess(@Nullable Long result) {
-                future.set(result);
-            }
-
-            @Override
-            public void onFailure(@Nonnull Throwable t) {
-                future.setException(t);
-            }
-        };
-        ListenableFuture<Long> f = executeUpsertRequest(item);
-        Futures.addCallback(f, callback);
+    private void executeUpsertRequest(final UpsertById.Item item, final CompletableFuture<Long> future) {
+        CompletableFuture<Long> f = executeUpsertRequest(item);
+        f.whenComplete(FutureCompleteConsumer.build(
+            (@Nullable Long result) -> future.complete(result),
+            (@Nonnull Throwable t) -> future.completeExceptionally(t)
+        ));
     }
 
-    private ListenableFuture<Long> executeUpsertRequest(final UpsertById.Item item) {
+    private CompletableFuture<Long> executeUpsertRequest(final UpsertById.Item item) {
         ShardId shardId;
         try {
             shardId = clusterService.operationRouting().indexShards(
@@ -191,9 +176,9 @@ public class UpsertByIdTask extends JobTask {
             ).shardId();
         } catch (IndexNotFoundException e) {
             if (PartitionName.isPartition(item.index())) {
-                return Futures.immediateFuture(0L);
+                return CompletableFuture.completedFuture(0L);
             } else {
-                return Futures.immediateFailedFuture(e);
+                return CompletableFutures.failedFuture(e);
             }
         }
 
@@ -217,7 +202,7 @@ public class UpsertByIdTask extends JobTask {
             createJobExecutionContext(upsertByIdContext);
             jobExecutionContext.start();
         } catch (Throwable throwable) {
-            return Futures.immediateFailedFuture(throwable);
+            return CompletableFutures.failedFuture(throwable);
         }
         return upsertByIdContext.resultFuture();
     }
@@ -229,7 +214,7 @@ public class UpsertByIdTask extends JobTask {
         jobExecutionContext = jobContextService.createContext(contextBuilder);
     }
 
-    private List<SettableFuture<Long>> initializeBulkShardProcessor(Settings settings) {
+    private List<CompletableFuture<Long>> initializeBulkShardProcessor(Settings settings) {
         assert upsertById.updateColumns() != null || upsertById.insertColumns() != null :
             "upsertById.updateColumns() or upsertById.insertColumns() must not be null";
         ShardUpsertRequest.Builder builder = new ShardUpsertRequest.Builder(
@@ -258,41 +243,37 @@ public class UpsertByIdTask extends JobTask {
             upsertById.executionPhaseId(), bulkShardProcessor);
 
         if (upsertById.numBulkResponses() == 0) {
-            final SettableFuture<Long> futureResult = SettableFuture.create();
-            List<SettableFuture<Long>> resultList = new ArrayList<>(1);
+            final CompletableFuture<Long> futureResult = new CompletableFuture<>();
+            List<CompletableFuture<Long>> resultList = new ArrayList<>(1);
             resultList.add(futureResult);
-            Futures.addCallback(bulkShardProcessor.result(), new FutureCallback<BitSet>() {
-                @Override
-                public void onSuccess(@Nullable BitSet result) {
+            bulkShardProcessor.result().whenComplete(FutureCompleteConsumer.build(
+                (@Nullable BitSet result) -> {
                     if (result == null) {
                         // unknown rowcount
-                        futureResult.set(Executor.ROWCOUNT_UNKNOWN);
+                        futureResult.complete(Executor.ROWCOUNT_UNKNOWN);
                     } else {
-                        futureResult.set((long) result.cardinality());
+                        futureResult.complete((long) result.cardinality());
                     }
                     bulkShardProcessorContext.close();
-                }
-
-                @Override
-                public void onFailure(@Nonnull Throwable t) {
-                    futureResult.setException(t);
+                },
+                (@Nonnull Throwable t) -> {
+                    futureResult.completeExceptionally(t);
                     bulkShardProcessorContext.close();
                 }
-            });
+            ));
             return resultList;
         } else {
             final int numResults = upsertById.numBulkResponses();
             final Integer[] resultsRowCount = new Integer[numResults];
-            final List<SettableFuture<Long>> resultList = new ArrayList<>(numResults);
+            final List<CompletableFuture<Long>> resultList = new ArrayList<>(numResults);
             for (int i = 0; i < numResults; i++) {
-                resultList.add(SettableFuture.<Long>create());
+                resultList.add(new CompletableFuture<>());
             }
 
-            Futures.addCallback(bulkShardProcessor.result(), new FutureCallback<BitSet>() {
-                @Override
-                public void onSuccess(@Nullable BitSet result) {
+            bulkShardProcessor.result().whenComplete(FutureCompleteConsumer.build(
+                (@Nullable BitSet result) -> {
                     if (result == null) {
-                        setAllToFailed(null);
+                        setAllToFailed(null, resultList);
                         return;
                     }
 
@@ -307,44 +288,39 @@ public class UpsertByIdTask extends JobTask {
                     }
 
                     for (int i = 0; i < numResults; i++) {
-                        SettableFuture<Long> future = resultList.get(i);
+                        CompletableFuture<Long> future = resultList.get(i);
                         Integer rowCount = resultsRowCount[i];
                         if (rowCount != null && rowCount >= 0) {
-                            future.set((long) rowCount);
+                            future.complete((long) rowCount);
                         } else {
                             // failure
-                            future.set(Executor.ROWCOUNT_ERROR);
+                            future.complete(Executor.ROWCOUNT_ERROR);
                         }
                     }
 
                     bulkShardProcessorContext.close();
-                }
-
-                private void setAllToFailed(@Nullable Throwable throwable) {
-                    if (throwable == null) {
-                        for (SettableFuture<Long> future : resultList) {
-                            future.set(Executor.ROWCOUNT_ERROR);
-                        }
-                    } else {
-                        for (SettableFuture<Long> future : resultList) {
-                            future.setException(throwable);
-                        }
-                    }
-                }
-
-                @Override
-                public void onFailure(@Nonnull Throwable t) {
-                    setAllToFailed(t);
+                }, (@Nonnull Throwable t) -> {
+                    setAllToFailed(t, resultList);
                     bulkShardProcessorContext.close();
-                }
-            });
+                }));
             return resultList;
         }
     }
 
+    private void setAllToFailed(@Nullable Throwable throwable, List<CompletableFuture<Long>> futures) {
+        if (throwable == null) {
+            for (CompletableFuture<Long> future : futures) {
+                future.complete(Executor.ROWCOUNT_ERROR);
+            }
+        } else {
+            for (CompletableFuture<Long> future : futures) {
+                future.completeExceptionally(throwable);
+            }
+        }
+    }
 
-    private SettableFuture<Long> createIndexAndExecuteUpsertRequest(final UpsertById.Item item) {
-        final SettableFuture<Long> future = SettableFuture.create();
+    private CompletableFuture<Long> createIndexAndExecuteUpsertRequest(final UpsertById.Item item) {
+        final CompletableFuture<Long> future = new CompletableFuture<>();
         transportCreateIndexAction.execute(
             new CreateIndexRequest(item.index()).cause("upsert single item"),
             new ActionListener<CreateIndexResponse>() {
@@ -359,7 +335,7 @@ public class UpsertByIdTask extends JobTask {
                     if (e instanceof IndexAlreadyExistsException) {
                         executeUpsertRequest(item, future);
                     } else {
-                        future.setException(e);
+                        future.completeExceptionally(e);
                     }
 
                 }

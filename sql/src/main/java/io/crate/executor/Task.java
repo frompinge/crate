@@ -21,11 +21,11 @@
 
 package io.crate.executor;
 
-import com.google.common.util.concurrent.ListenableFuture;
 import io.crate.core.collections.Row;
 import io.crate.operation.projectors.RowReceiver;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public interface Task {
 
@@ -44,5 +44,5 @@ public interface Task {
      *
      * @throws UnsupportedOperationException if the task doesn't support bulk operations
      */
-    ListenableFuture<List<Long>> executeBulk();
+    CompletableFuture<List<Long>> executeBulk();
 }

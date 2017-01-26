@@ -22,7 +22,6 @@
 
 package io.crate.protocols.postgres;
 
-import com.google.common.util.concurrent.FutureCallback;
 import io.crate.exceptions.Exceptions;
 import io.crate.operation.collect.stats.StatsTables;
 
@@ -30,7 +29,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.UUID;
 
-public class StatsTablesUpdateListener implements FutureCallback<Object> {
+public class StatsTablesUpdateListener {
 
     private final UUID jobId;
     private final StatsTables statsTables;
@@ -40,12 +39,10 @@ public class StatsTablesUpdateListener implements FutureCallback<Object> {
         this.statsTables = statsTables;
     }
 
-    @Override
     public void onSuccess(@Nullable Object result) {
         statsTables.logExecutionEnd(jobId, null);
     }
 
-    @Override
     public void onFailure(@Nonnull Throwable t) {
         statsTables.logExecutionEnd(jobId, Exceptions.messageOf(t));
     }

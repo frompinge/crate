@@ -23,13 +23,12 @@
 package io.crate.protocols.postgres;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
 import io.crate.action.sql.Option;
 import io.crate.action.sql.ResultReceiver;
 import io.crate.action.sql.SQLOperations;
 import io.crate.analyze.symbol.Field;
 import io.crate.analyze.symbol.Symbols;
+import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.protocols.postgres.types.PGType;
 import io.crate.protocols.postgres.types.PGTypes;
 import io.crate.types.DataType;
@@ -206,19 +205,17 @@ class ConnectionContext {
         return sqlOperations.createSession(defaultSchema, Option.NONE, 0);
     }
 
-    private static class ReadyForQueryCallback implements FutureCallback<Object> {
+    private static class ReadyForQueryCallback {
         private final Channel channel;
 
         private ReadyForQueryCallback(Channel channel) {
             this.channel = channel;
         }
 
-        @Override
         public void onSuccess(@Nullable Object result) {
             Messages.sendReadyForQuery(channel);
         }
 
-        @Override
         public void onFailure(@Nonnull Throwable t) {
             Messages.sendReadyForQuery(channel);
         }
@@ -526,7 +523,10 @@ class ConnectionContext {
             return;
         }
         try {
-            Futures.addCallback(session.sync(), new ReadyForQueryCallback(channel));
+            ReadyForQueryCallback readyForQueryCallback = new ReadyForQueryCallback(channel);
+            session.sync().whenComplete(FutureCompleteConsumer.build(
+               readyForQueryCallback::onSuccess, readyForQueryCallback::onFailure
+            ));
         } catch (Throwable t) {
             Messages.sendErrorResponse(channel, t);
             Messages.sendReadyForQuery(channel);
@@ -565,7 +565,10 @@ class ConnectionContext {
                 ResultSetReceiver resultSetReceiver = new ResultSetReceiver(query, channel, Symbols.extractTypes(fields), null);
                 session.execute("", 0, resultSetReceiver);
             }
-            Futures.addCallback(session.sync(), new ReadyForQueryCallback(channel));
+            ReadyForQueryCallback readyForQueryCallback = new ReadyForQueryCallback(channel);
+            session.sync().whenComplete(FutureCompleteConsumer.build(
+                readyForQueryCallback::onSuccess, readyForQueryCallback::onFailure
+            ));
         } catch (Throwable t) {
             session.clearState();
             Messages.sendErrorResponse(channel, t);

@@ -21,8 +21,6 @@
 
 package io.crate.executor.task;
 
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
 import io.crate.core.collections.Row;
 import io.crate.executor.Task;
 import io.crate.operation.projectors.RepeatHandle;
@@ -30,11 +28,12 @@ import io.crate.operation.projectors.RowReceiver;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public class NoopTask implements Task {
 
     public static final NoopTask INSTANCE = new NoopTask();
-    private static final ListenableFuture<List<Long>> EMPTY_RESULT = Futures.immediateFuture(Collections.<Long>emptyList());
+    private static final CompletableFuture<List<Long>> EMPTY_RESULT = CompletableFuture.completedFuture(Collections.<Long>emptyList());
 
     private NoopTask() {
     }
@@ -45,7 +44,7 @@ public class NoopTask implements Task {
     }
 
     @Override
-    public ListenableFuture<List<Long>> executeBulk() {
+    public CompletableFuture<List<Long>> executeBulk() {
         return EMPTY_RESULT;
     }
 }

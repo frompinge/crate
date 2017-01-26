@@ -23,10 +23,11 @@
 package io.crate.action;
 
 import com.google.common.base.Function;
-import com.google.common.util.concurrent.AbstractFuture;
 import org.elasticsearch.action.ActionListener;
 
-public class FutureActionListener<Response, Result> extends AbstractFuture<Result> implements ActionListener<Response> {
+import java.util.concurrent.CompletableFuture;
+
+public class FutureActionListener<Response, Result> extends CompletableFuture<Result> implements ActionListener<Response> {
 
     private final Function<? super Response, ? extends Result> transformFunction;
 
@@ -36,11 +37,11 @@ public class FutureActionListener<Response, Result> extends AbstractFuture<Resul
 
     @Override
     public void onResponse(Response response) {
-        set(transformFunction.apply(response));
+        complete(transformFunction.apply(response));
     }
 
     @Override
     public void onFailure(Throwable e) {
-        setException(e);
+        completeExceptionally(e);
     }
 }

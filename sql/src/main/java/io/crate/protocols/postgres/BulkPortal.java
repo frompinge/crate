@@ -22,15 +22,12 @@
 
 package io.crate.protocols.postgres;
 
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.SettableFuture;
 import io.crate.action.sql.ResultReceiver;
 import io.crate.action.sql.SessionContext;
 import io.crate.analyze.Analysis;
 import io.crate.analyze.ParameterContext;
 import io.crate.analyze.symbol.Field;
+import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Row;
 import io.crate.core.collections.RowN;
 import io.crate.core.collections.Rows;
@@ -47,6 +44,7 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 class BulkPortal extends AbstractPortal {
 
@@ -118,7 +116,7 @@ class BulkPortal extends AbstractPortal {
     }
 
     @Override
-    public ListenableFuture<?> sync(Planner planner, StatsTables statsTables) {
+    public CompletableFuture<?> sync(Planner planner, StatsTables statsTables) {
         List<Row> bulkParams = Rows.of(bulkArgs);
         Analysis analysis = portalContext.getAnalyzer().boundAnalyze(statement,
             sessionContext,
@@ -135,37 +133,33 @@ class BulkPortal extends AbstractPortal {
         return executeBulk(portalContext.getExecutor(), plan, jobId, statsTables);
     }
 
-    private ListenableFuture<Void> executeBulk(Executor executor, Plan plan, final UUID jobId,
-                             final StatsTables statsTables) {
-        final SettableFuture<Void> future = SettableFuture.create();
-        Futures.addCallback(executor.executeBulk(plan), new FutureCallback<List<Long>>() {
-                @Override
-                public void onSuccess(@Nullable List<Long> result) {
-                    assert result != null && result.size() == resultReceivers.size()
-                        : "number of result must match number of rowReceivers";
+    private CompletableFuture<Void> executeBulk(Executor executor, Plan plan, final UUID jobId,
+                                                final StatsTables statsTables) {
+        final CompletableFuture<Void> future = new CompletableFuture<>();
+        executor.executeBulk(plan).whenComplete(FutureCompleteConsumer.build(
+            (@Nullable List<Long> result) -> {
+                assert result != null && result.size() == resultReceivers.size()
+                    : "number of result must match number of rowReceivers";
 
-                    Long[] cells = new Long[1];
-                    RowN row = new RowN(cells);
-                    for (int i = 0; i < result.size(); i++) {
-                        cells[0] = result.get(i);
-                        ResultReceiver resultReceiver = resultReceivers.get(i);
-                        resultReceiver.setNextRow(row);
-                        resultReceiver.allFinished();
-                    }
-                    future.set(null);
-                    statsTables.logExecutionEnd(jobId, null);
+                Long[] cells = new Long[1];
+                RowN row = new RowN(cells);
+                for (int i = 0; i < result.size(); i++) {
+                    cells[0] = result.get(i);
+                    ResultReceiver resultReceiver = resultReceivers.get(i);
+                    resultReceiver.setNextRow(row);
+                    resultReceiver.allFinished();
                 }
-
-                @Override
-                public void onFailure(Throwable t) {
-                    for (ResultReceiver resultReceiver : resultReceivers) {
-                        resultReceiver.fail(t);
-                    }
-                    future.setException(t);
-                    statsTables.logExecutionEnd(jobId, Exceptions.messageOf(t));
-
+                future.complete(null);
+                statsTables.logExecutionEnd(jobId, null);
+            },
+            (Throwable t) -> {
+                for (ResultReceiver resultReceiver : resultReceivers) {
+                    resultReceiver.fail(t);
                 }
-            });
+                future.completeExceptionally(t);
+                statsTables.logExecutionEnd(jobId, Exceptions.messageOf(t));
+            }
+        ));
         return future;
     }
 }

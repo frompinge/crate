@@ -28,10 +28,8 @@ import com.carrotsearch.hppc.IntObjectMap;
 import com.carrotsearch.hppc.IntSet;
 import com.carrotsearch.hppc.cursors.IntCursor;
 import com.carrotsearch.hppc.cursors.IntObjectCursor;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
 import io.crate.analyze.symbol.Symbol;
+import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Bucket;
 import io.crate.core.collections.Row;
 import io.crate.metadata.Functions;
@@ -49,6 +47,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -183,11 +182,10 @@ public class FetchProjector extends AbstractProjector {
                 }
             } else {
                 final String nodeId = entry.getKey();
-                ListenableFuture<IntObjectMap<? extends Bucket>> future = fetchOperation.fetch(nodeId, toFetch, isLast);
+                CompletableFuture<IntObjectMap<? extends Bucket>> future = fetchOperation.fetch(nodeId, toFetch, isLast);
 
-                Futures.addCallback(future, new FutureCallback<IntObjectMap<? extends Bucket>>() {
-                    @Override
-                    public void onSuccess(@Nullable IntObjectMap<? extends Bucket> result) {
+                future.whenComplete(FutureCompleteConsumer.build(
+                    (@Nullable IntObjectMap<? extends Bucket> result) -> {
                         if (result != null) {
                             for (IntObjectCursor<? extends Bucket> cursor : result) {
                                 ReaderBucket readerBucket = context.getReaderBucket(cursor.key);
@@ -197,15 +195,13 @@ public class FetchProjector extends AbstractProjector {
                         if (remainingRequests.decrementAndGet() == 0) {
                             resultExecutor.execute(new SendToDownstreamRunnable(isLast));
                         }
-                    }
-
-                    @Override
-                    public void onFailure(@Nonnull Throwable t) {
+                    },
+                    (@Nonnull Throwable t) -> {
                         LOGGER.error("NodeFetchRequest failed on node {}", t, nodeId);
                         remainingRequests.decrementAndGet();
                         fail(t);
                     }
-                });
+                ));
             }
         }
     }

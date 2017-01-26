@@ -22,12 +22,11 @@
 
 package io.crate.rest.action;
 
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
 import io.crate.action.sql.*;
 import io.crate.action.sql.parser.SQLXContentSourceContext;
 import io.crate.action.sql.parser.SQLXContentSourceParser;
 import io.crate.analyze.symbol.Field;
+import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.exceptions.SQLParseException;
 import io.crate.types.DataType;
 import org.elasticsearch.client.Client;
@@ -154,9 +153,8 @@ public class RestSQLAction extends BaseRestHandler {
                 throw new UnsupportedOperationException(
                     "Bulk operations for statements that return result sets is not supported");
             }
-            Futures.addCallback(session.sync(), new FutureCallback<Object>() {
-                @Override
-                public void onSuccess(@Nullable Object result) {
+            session.sync().whenComplete(FutureCompleteConsumer.build(
+                (@Nullable Object result) -> {
                     try {
                         XContentBuilder builder = ResultToXContentBuilder.builder(channel)
                             .cols(Collections.<Field>emptyList())
@@ -164,15 +162,13 @@ public class RestSQLAction extends BaseRestHandler {
                             .bulkRows(results).build();
                         channel.sendResponse(new BytesRestResponse(RestStatus.OK, builder));
                     } catch (Throwable e) {
-                        onFailure(e);
+                        errorResponse(channel, e);
                     }
-                }
-                @Override
-                public void onFailure(@Nonnull Throwable t) {
+                },
+                (@Nonnull Throwable t) -> {
                     errorResponse(channel, t);
-
                 }
-            });
+            ));
         } catch (Throwable t) {
             errorResponse(channel, t);
         }
