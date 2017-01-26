@@ -24,6 +24,8 @@ package io.crate.operation.reference.sys.cluster;
 import io.crate.metadata.settings.CrateSettings;
 import io.crate.test.integration.CrateUnitTest;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.ByteSizeUnit;
+import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.unit.TimeValue;
 import org.junit.Test;
 
@@ -97,5 +99,36 @@ public class ApplySettingsTest extends CrateUnitTest {
 
         name = CrateSettings.DISCOVERY_ZEN_MIN_MASTER_NODES.settingName();
         assertEquals(values.get(name), settings.getAsInt(name, 2));
+    }
+
+    @Test
+    @Deprecated
+    public void testApplyNewSettingIfDeprecated() {
+        ConcurrentHashMap<String, Object> values = new ConcurrentHashMap<>();
+        values.put(CrateSettings.INDICES_FIELDDATA_BREAKER_LIMIT.settingName(), CrateSettings.INDICES_FIELDDATA_BREAKER_LIMIT.defaultValue());
+        values.put(CrateSettings.INDICES_FIELDDATA_BREAKER_OVERHEAD.settingName(), CrateSettings.INDICES_FIELDDATA_BREAKER_OVERHEAD.defaultValue());
+        Settings initialSettings = Settings.builder()
+            .put(CrateSettings.INDICES_FIELDDATA_BREAKER_LIMIT.settingName(), 10L, ByteSizeUnit.MB)
+            .put(CrateSettings.INDICES_FIELDDATA_BREAKER_OVERHEAD.settingName(), 2.0)
+            .build();
+        ClusterSettingsExpression.ApplySettings applySettings = new ClusterSettingsExpression.ApplySettings(initialSettings, values);
+
+        String name = CrateSettings.INDICES_BREAKER_FIELDDATA_LIMIT.settingName();
+        assertEquals(values.get(name), initialSettings.getAsBytesSize(name, new ByteSizeValue(10L, ByteSizeUnit.MB)));
+
+        name = CrateSettings.INDICES_BREAKER_FIELDDATA_OVERHEAD.settingName();
+        assertEquals(values.get(name), initialSettings.getAsDouble(name, 2.0));
+
+        Settings.Builder builder = Settings.builder()
+            .put(CrateSettings.INDICES_BREAKER_FIELDDATA_LIMIT.settingName(), CrateSettings.INDICES_BREAKER_FIELDDATA_LIMIT.defaultValue())
+            .put(CrateSettings.INDICES_BREAKER_FIELDDATA_OVERHEAD.settingName(), CrateSettings.INDICES_BREAKER_FIELDDATA_OVERHEAD.defaultValue());
+        Settings settings = builder.build();
+        applySettings.onRefreshSettings(settings);
+
+        name = CrateSettings.INDICES_BREAKER_FIELDDATA_LIMIT.settingName();
+        assertEquals(values.get(name), initialSettings.getAsBytesSize(name, CrateSettings.INDICES_BREAKER_FIELDDATA_LIMIT.extract(settings)));
+
+        name = CrateSettings.INDICES_BREAKER_FIELDDATA_OVERHEAD.settingName();
+        assertEquals(values.get(name), initialSettings.getAsDouble(name, CrateSettings.INDICES_BREAKER_FIELDDATA_OVERHEAD.defaultValue()));
     }
 }

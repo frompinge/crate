@@ -42,8 +42,7 @@ class SetStatementAnalyzer {
 
         if (!SetStatement.Scope.GLOBAL.equals(node.scope())) {
             Assignment assignment = node.assignments().get(0);
-            // parser does not allow using the parameter expressions as setting names in the SET statements,
-            // therefore it is fine to convert the expression to string here.
+            assignment = rewriteOldSettings(assignment);
             String settingName = ExpressionToStringVisitor.convert(assignment.columnName(), Row.EMPTY);
             Set<String> nameParts = CrateSettings.settingNamesByPrefix(settingName);
             if (nameParts.size() != 0) {
@@ -54,6 +53,7 @@ class SetStatementAnalyzer {
             return new SetAnalyzedStatement(node.scope(), settings, isPersistent);
         } else {
             for (Assignment assignment : node.assignments()) {
+                assignment = rewriteOldSettings(assignment);
                 for (String setting : ExpressionToSettingNameListVisitor.convert(assignment)) {
                     CrateSettings.checkIfRuntimeSetting(setting);
                 }
@@ -81,6 +81,24 @@ class SetStatementAnalyzer {
             }
         }
         return new ResetAnalyzedStatement(settingsToRemove);
+    }
+
+    /**
+     * Rewrites old settings to new settings
+     * This will be removed in CrateDB v1.1
+     */
+    @Deprecated
+    private static Assignment rewriteOldSettings(Assignment assignment) {
+        // parser does not allow using the parameter expressions as setting names in the SET statements,
+        // therefore it is fine to convert the expression to string here.
+        String settingName = ExpressionToStringVisitor.convert(assignment.columnName(), Row.EMPTY);
+        if (settingName.equals(CrateSettings.INDICES_FIELDDATA_BREAKER_LIMIT.settingName())) {
+            assignment = new Assignment(new QualifiedNameReference(new QualifiedName("indices.breaker.fielddata.limit")), assignment.expression());
+        }
+        if (settingName.equals(CrateSettings.INDICES_FIELDDATA_BREAKER_OVERHEAD.settingName())) {
+            assignment = new Assignment(new QualifiedNameReference(new QualifiedName("indices.breaker.fielddata.overhead")), assignment.expression());
+        }
+        return assignment;
     }
 
     private static class ExpressionToSettingNameListVisitor extends AstVisitor<Collection<String>, String> {
