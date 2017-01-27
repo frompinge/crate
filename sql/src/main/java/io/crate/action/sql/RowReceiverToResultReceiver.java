@@ -77,12 +77,10 @@ public class RowReceiverToResultReceiver implements RowReceiver {
         fail(throwable);
     }
 
-    public void interrupt() {
-        if (!interrupted) {
+    public void interruptIfResumable() {
+        if (!interrupted && resumeHandle != null) {
             interrupted = true;
-            if (resumeHandle != null) {
-                resumeHandle.resume(false);
-            }
+            resumeHandle.resume(false);
         }
     }
 

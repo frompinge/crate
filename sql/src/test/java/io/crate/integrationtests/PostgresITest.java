@@ -51,8 +51,7 @@ public class PostgresITest extends SQLTransportIntegrationTest {
     protected Settings nodeSettings(int nodeOrdinal) {
         Settings.Builder builder = Settings.builder();
         builder.put(super.nodeSettings(nodeOrdinal))
-            .put("network.host", "127.0.0.1")
-            .put("stats.enabled", true);
+            .put("network.host", "127.0.0.1");
 
         if ((nodeOrdinal + 1) % 2 == 0) {
             builder.put("psql.port", "4242");
@@ -300,7 +299,11 @@ public class PostgresITest extends SQLTransportIntegrationTest {
     }
 
     @Test
-    public void testCloseUnfinishedResultSet() throws Exception {
+    public void testCloseConnectionWithUnfinishedResultSetDoesNotLeaveAnyPendingOperations() throws Exception {
+        try (Connection conn = DriverManager.getConnection(JDBC_CRATE_URL, properties);
+            Statement statement = conn.createStatement()) {
+            statement.execute("SET GLOBAL stats.enabled = TRUE");
+        }
         try (Connection conn = DriverManager.getConnection(JDBC_CRATE_URL, properties)) {
             conn.setAutoCommit(false);
             try (Statement statement = conn.createStatement()) {
@@ -311,16 +314,19 @@ public class PostgresITest extends SQLTransportIntegrationTest {
                 }
             }
         }
-        try (Connection conn = DriverManager.getConnection(JDBC_CRATE_URL, properties)) {
-            Statement statement = conn.createStatement();
-            ResultSet rs = statement.executeQuery("SELECT job_id, count(*) AS num_ops FROM sys.operations GROUP BY job_id");
+        try (Connection conn = DriverManager.getConnection(JDBC_CRATE_URL, properties);
+            Statement statement = conn.createStatement()) {
+            String q = "SELECT j.stmt, o.name FROM sys.operations AS o, sys.jobs AS j WHERE o.job_id = j.id";
+            ResultSet rs = statement.executeQuery(q);
             int rowCount = 0;
             while (rs.next()) {
-                rowCount++;
-                System.out.println(rs.getString(1));
-                System.out.println(rs.getInt(2));
+                String stmt = rs.getString(1);
+                if (!q.equals(stmt)) {
+                    rowCount++;
+                }
             }
-            assertThat(rowCount, is(1));
+            assertThat(rowCount, is(0));
+            statement.execute("RESET GLOBAL stats.enabled");
         }
     }
 

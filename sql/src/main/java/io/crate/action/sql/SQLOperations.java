@@ -22,6 +22,7 @@
 
 package io.crate.action.sql;
 
+import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.crate.analyze.Analyzer;
@@ -197,6 +198,9 @@ public class SQLOperations {
                 if (portal != newPortal) {
                     portals.put(portalName, newPortal);
                     pendingExecutions.remove(portal);
+                } else if (portal.finished()) {
+                    // Make sure existing portal stops receiving results!
+                    portal.close();
                 }
             } catch (Throwable t) {
                 statsTables.logPreExecutionFailure(UUID.randomUUID(), portal.getLastQuery(), Exceptions.messageOf(t));
@@ -280,8 +284,10 @@ public class SQLOperations {
                     clearState();
                     ListenableFuture<?> result = portal.sync(planner, statsTables);
                     if (UNNAMED.equals(portal.name())) {
-                        // simple statement must not allow 2nd bind() call after sync()
-                        portal.lock();
+                        // The Postgres Wire Protocol states that unnamed portals are implicitly closed.
+                        // However if we would close the portal here, we would also interrupt the result receiving operations.
+                        // Instead we mark it as finished instead and close it with the next bind() call if necessary()
+                        portal.finish();
                     }
                     return result;
             }

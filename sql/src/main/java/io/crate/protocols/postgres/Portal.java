@@ -54,8 +54,7 @@ public interface Portal {
 
     void close();
 
-    void lock();
+    void finish();
 
-    boolean locked();
-
+    boolean finished();
 }

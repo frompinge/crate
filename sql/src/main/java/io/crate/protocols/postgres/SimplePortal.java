@@ -37,7 +37,6 @@ import io.crate.analyze.symbol.Symbols;
 import io.crate.core.collections.Row;
 import io.crate.core.collections.RowN;
 import io.crate.exceptions.Exceptions;
-import io.crate.exceptions.PortalAlreadyBoundException;
 import io.crate.exceptions.ReadOnlyException;
 import io.crate.executor.Executor;
 import io.crate.operation.collect.stats.StatsTables;
@@ -105,9 +104,6 @@ public class SimplePortal extends AbstractPortal {
                        List<Object> params,
                        @Nullable FormatCodes.FormatCode[] resultFormatCodes) {
 
-        if (locked()) {
-            throw new PortalAlreadyBoundException();
-        }
         if (statement.equals(this.statement)) {
             if (portalContext.isReadOnly()) { // Cannot have a bulk operation in read only mode
                 throw new ReadOnlyException();
@@ -193,7 +189,7 @@ public class SimplePortal extends AbstractPortal {
     @Override
     public void close() {
         if (rowReceiver != null) {
-            rowReceiver.interrupt();
+            rowReceiver.interruptIfResumable();
         }
     }
 
@@ -224,6 +220,7 @@ public class SimplePortal extends AbstractPortal {
         }
         return analysis.rootRelation().fields();
     }
+
     private static class ResultReceiverRetryWrapper implements ResultReceiver {
 
         private final ResultReceiver delegate;
