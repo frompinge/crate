@@ -54,6 +54,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
+import static io.crate.operation.collect.stats.StatsTablesService.clearInterval;
 import static org.hamcrest.Matchers.is;
 
 public class StatsTablesTest extends CrateDummyClusterServiceUnitTest {
@@ -161,6 +162,7 @@ public class StatsTablesTest extends CrateDummyClusterServiceUnitTest {
         clusterSettings.applySettings(Settings.builder()
             .put(CrateSettings.STATS_JOBS_LOG_SIZE.settingName(), 200)
             .put(CrateSettings.STATS_OPERATIONS_LOG_SIZE.settingName(), 200)
+            .put(CrateSettings.STATS_ENABLED.settingName(), true)
             .build());
         assertThat(stats.jobsLogSink, Matchers.instanceOf(QueueSink.class));
         assertThat(inspectRamAccountingQueue((QueueSink) stats.jobsLogSink),
@@ -170,12 +172,12 @@ public class StatsTablesTest extends CrateDummyClusterServiceUnitTest {
             Matchers.instanceOf(BlockingEvictingQueue.class));
 
         // disable stats
-        clusterSettings.validateUpdate(Settings.builder()
+        clusterSettings.applySettings(Settings.builder()
             .put(CrateSettings.STATS_ENABLED.settingName(), false)
             .build());
+        assertThat(stats.isEnabled(), is(false));
         assertThat(stats.jobsLogSink, Matchers.instanceOf(NoopLogSink.class));
         assertThat(stats.operationsLogSink, Matchers.instanceOf(NoopLogSink.class));
-        assertThat(stats.isEnabled(), is(false));
     }
 
     private static Queue inspectRamAccountingQueue(QueueSink sink) throws Exception {
@@ -216,7 +218,7 @@ public class StatsTablesTest extends CrateDummyClusterServiceUnitTest {
     @Test
     public void testUniqueOperationIdsInOperationsTable() {
         StatsTables statsTables = new StatsTables(() -> true);
-        Queue<OperationContextLog> q = new BlockingEvictingQueue(10);
+        Queue<OperationContextLog> q = new BlockingEvictingQueue<>(10);
         statsTables.updateOperationsLog(new QueueSink<>(q, ramAccountingContext::close));
 
         OperationContext ctxA = new OperationContext(0, UUID.randomUUID(), "dummyOperation", 1L);
@@ -238,11 +240,10 @@ public class StatsTablesTest extends CrateDummyClusterServiceUnitTest {
 
     @Test
     public void testLowerBoundScheduler() throws NoSuchMethodException {
-        StatsTablesService stats = new StatsTablesService(Settings.EMPTY, clusterSettings, scheduler, breakerService);
-        assertThat(stats.clearInterval(TimeValue.timeValueMillis(1L)), is(1000L));
-        assertThat(stats.clearInterval(TimeValue.timeValueSeconds(8L)), is(1000L));
-        assertThat(stats.clearInterval(TimeValue.timeValueSeconds(10L)), is(1000L));
-        assertThat(stats.clearInterval(TimeValue.timeValueSeconds(20L)), is(2000L));
-        assertThat(stats.clearInterval(TimeValue.timeValueHours(720L)), is(86_400_000L));  // 30 days
+        assertThat(clearInterval(TimeValue.timeValueMillis(1L)), is(1000L));
+        assertThat(clearInterval(TimeValue.timeValueSeconds(8L)), is(1000L));
+        assertThat(clearInterval(TimeValue.timeValueSeconds(10L)), is(1000L));
+        assertThat(clearInterval(TimeValue.timeValueSeconds(20L)), is(2000L));
+        assertThat(clearInterval(TimeValue.timeValueHours(720L)), is(86_400_000L));  // 30 days
     }
 }

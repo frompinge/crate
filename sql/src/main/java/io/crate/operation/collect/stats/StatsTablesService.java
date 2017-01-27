@@ -103,19 +103,11 @@ public class StatsTablesService extends AbstractLifecycleComponent implements Pr
         this.breakerService = breakerService;
 
         isEnabled = STATS_ENABLED_SETTING.get(settings);
-        jobsLogSize = STATS_JOBS_LOG_SIZE_SETTING.get(settings);
-        jobsLogExpiration = STATS_JOBS_LOG_EXPIRATION_SETTING.get(settings);
-        operationsLogSize = STATS_OPERATIONS_LOG_SIZE_SETTING.get(settings);
-        operationsLogExpiration = STATS_OPERATIONS_LOG_EXPIRATION_SETTING.get(settings);
-
         statsTables = new StatsTables(this::isEnabled);
-        if (isEnabled()) {
-            setJobsLogSink(jobsLogSize, jobsLogExpiration);
-            setOperationsLogSink(operationsLogSize, operationsLogExpiration);
-        } else {
-            setJobsLogSink(0, TimeValue.timeValueSeconds(0L));
-            setOperationsLogSink(0, TimeValue.timeValueSeconds(0L));
-        }
+        setJobsLogSink(
+            STATS_JOBS_LOG_SIZE_SETTING.get(settings), STATS_JOBS_LOG_EXPIRATION_SETTING.get(settings));
+        setOperationsLogSink(
+            STATS_OPERATIONS_LOG_SIZE_SETTING.get(settings), STATS_OPERATIONS_LOG_EXPIRATION_SETTING.get(settings));
 
         clusterSettings.addSettingsUpdateConsumer(STATS_ENABLED_SETTING, this::setStatsEnabled);
         clusterSettings.addSettingsUpdateConsumer(STATS_JOBS_LOG_SIZE_SETTING, STATS_JOBS_LOG_EXPIRATION_SETTING, this::setJobsLogSink);
@@ -125,8 +117,15 @@ public class StatsTablesService extends AbstractLifecycleComponent implements Pr
     private void setJobsLogSink(int size, TimeValue expiration) {
         jobsLogSize = size;
         jobsLogExpiration = expiration;
-        LogSink<JobContextLog> newSink = createSink(size, expiration, JOB_CONTEXT_LOG_ESTIMATOR,
-            CrateCircuitBreakerService.JOBS_LOG);
+        if (!isEnabled) {
+            return;
+        }
+        updateJobSink(size, expiration);
+    }
+
+    private void updateJobSink(int size, TimeValue expiration) {
+        LogSink<JobContextLog> newSink = createSink(
+            size, expiration, JOB_CONTEXT_LOG_ESTIMATOR, CrateCircuitBreakerService.JOBS_LOG);
         LogSink<JobContextLog> oldSink = jobsLogSink;
         newSink.addAll(oldSink);
         jobsLogSink = newSink;
@@ -175,6 +174,13 @@ public class StatsTablesService extends AbstractLifecycleComponent implements Pr
     private void setOperationsLogSink(int size, TimeValue expiration) {
         operationsLogSize = size;
         operationsLogExpiration = expiration;
+        if (!isEnabled) {
+            return;
+        }
+        updateOperationSink(size, expiration);
+    }
+
+    private void updateOperationSink(int size, TimeValue expiration) {
         LogSink<OperationContextLog> newSink = createSink(size, expiration, OPERATION_CONTEXT_LOG_SIZE_ESTIMATOR,
             CrateCircuitBreakerService.OPERATIONS_LOG);
         LogSink<OperationContextLog> oldSink = operationsLogSink;
@@ -184,16 +190,18 @@ public class StatsTablesService extends AbstractLifecycleComponent implements Pr
         oldSink.close();
     }
 
-    private void setStatsEnabled(boolean statsEnabled) {
-        if (isEnabled) { // need to disable
-            setOperationsLogSink(0, TimeValue.timeValueSeconds(0L));
-            setJobsLogSink(0, TimeValue.timeValueSeconds(0L));
-            isEnabled = false;
-        } else if (statsEnabled) { // need to enable
-            // queue sizes was zero before so we have to change it
+    private void setStatsEnabled(boolean enableStats) {
+        if (isEnabled == enableStats) {
+            return;
+        }
+        if (enableStats) {
+            isEnabled = true;
             setOperationsLogSink(operationsLogSize, operationsLogExpiration);
             setJobsLogSink(jobsLogSize, jobsLogExpiration);
-            isEnabled = true;
+        } else {
+            isEnabled = false;
+            updateOperationSink(0, TimeValue.timeValueSeconds(0));
+            updateJobSink(0, TimeValue.timeValueSeconds(0));
         }
     }
 
@@ -227,56 +235,4 @@ public class StatsTablesService extends AbstractLifecycleComponent implements Pr
     public StatsTables get() {
         return statsTables();
     }
-
-    /*
-    private class NodeSettingListener implements NodeSettingsService.Listener {
-
-        @Override
-        public void onRefreshSettings(Settings settings) {
-            boolean wasEnabled = lastIsEnabled;
-            boolean becomesEnabled = extractIsEnabled(settings);
-
-            if (wasEnabled && becomesEnabled) {
-                int opSize = extractOperationsLogSize(settings);
-                TimeValue opExpiration = extractOperationsLogExpiration(settings);
-                if (opSize != lastOperationsLogSize || !opExpiration.equals(lastOperationsLogExpiration)) {
-                    lastOperationsLogSize = opSize;
-                    lastOperationsLogExpiration = opExpiration;
-                    setOperationsLogSink(opSize, opExpiration);
-                }
-
-                int jobSize = extractJobsLogSize(settings);
-                TimeValue jobExpiration = extractJobsLogExpiration(settings);
-                if (jobSize != lastJobsLogSize || !jobExpiration.equals(lastJobsLogExpiration)) {
-                    lastJobsLogSize = jobSize;
-                    lastJobsLogExpiration = jobExpiration;
-                    setJobsLogSink(jobSize, jobExpiration);
-                }
-
-            } else if (wasEnabled) { // !becomesEnabled
-                setOperationsLogSink(0, TimeValue.timeValueSeconds(0L));
-                setJobsLogSink(0, TimeValue.timeValueSeconds(0L));
-                lastIsEnabled = false;
-
-                lastOperationsLogSize = extractOperationsLogSize(settings);
-                lastJobsLogSize = extractJobsLogSize(settings);
-            } else if (becomesEnabled) { // !wasEnabled
-                lastIsEnabled = true;
-
-                // queue sizes was zero before so we have to change it
-                int opSize = extractOperationsLogSize(settings);
-                TimeValue opExpiration = extractOperationsLogExpiration(settings);
-                lastOperationsLogSize = opSize;
-                lastOperationsLogExpiration = opExpiration;
-                setOperationsLogSink(opSize, opExpiration);
-
-                int jobSize = extractJobsLogSize(settings);
-                TimeValue jobExpiration = extractJobsLogExpiration(settings);
-                lastJobsLogSize = jobSize;
-                lastJobsLogExpiration = jobExpiration;
-                setJobsLogSink(jobSize, jobExpiration);
-            }
-        }
-    }
-    */
 }
