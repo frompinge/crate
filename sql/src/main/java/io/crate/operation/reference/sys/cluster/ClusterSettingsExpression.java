@@ -91,6 +91,7 @@ public class ClusterSettingsExpression extends NestedObjectExpression {
         this.clusterService = clusterService;
         setDefaultValues(CrateSettings.SETTINGS);
         applyInitialSettingsAndRegisterUpdateConsumer(CrateSettings.CRATE_SETTINGS, settings);
+        applyInitialSettingsAndRegisterUpdateConsumer(CrateSettings.SETTINGS, settings);
         addChildImplementations();
     }
 
