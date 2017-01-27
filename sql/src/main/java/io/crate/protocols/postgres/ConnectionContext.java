@@ -303,7 +303,6 @@ class ConnectionContext {
                             return;
                         case 'X': // Terminate (called when jdbc connection is closed)
                             closeSession();
-                            Messages.sendCloseComplete(channel);
                             channel.close();
                             return;
                         default:
