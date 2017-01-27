@@ -26,7 +26,6 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.crate.concurrent.CountdownFutureCallback;
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.exceptions.ContextMissingException;
 import io.crate.operation.collect.stats.StatsTables;
 import org.elasticsearch.ElasticsearchException;
@@ -41,6 +40,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
 @Singleton
@@ -125,10 +125,7 @@ public class JobContextService extends AbstractLifecycleComponent<JobContextServ
         JobExecutionContext newContext = contextBuilder.build();
 
         JobContextCallback jobContextCallback = new JobContextCallback(jobId);
-        FutureCompleteConsumer<Object> jobContextCompleteConsumer = FutureCompleteConsumer.build(
-            jobContextCallback::onSuccess, jobContextCallback::onFailure
-        );
-        newContext.completionFuture().whenComplete(jobContextCompleteConsumer);
+        newContext.completionFuture().whenComplete(jobContextCallback);
 
         JobExecutionContext existing = activeContexts.putIfAbsent(jobId, newContext);
         if (existing != null) {
@@ -172,14 +169,12 @@ public class JobContextService extends AbstractLifecycleComponent<JobContextServ
         for (UUID jobId : toKill) {
             JobExecutionContext ctx = activeContexts.get(jobId);
             if (ctx != null) {
-                ctx.completionFuture().whenComplete(FutureCompleteConsumer.build(
-                    countDownFuture::onSuccess, countDownFuture::onFailure
-                ));
+                ctx.completionFuture().whenComplete(countDownFuture);
                 ctx.kill();
                 numKilled++;
             } else {
                 // no kill but we need to count down
-                countDownFuture.onSuccess(null);
+                countDownFuture.onSuccess();
             }
         }
         final SettableFuture<Integer> result = SettableFuture.create();
@@ -202,7 +197,7 @@ public class JobContextService extends AbstractLifecycleComponent<JobContextServ
         return killContexts(toKill);
     }
 
-    private class JobContextCallback {
+    private class JobContextCallback implements BiConsumer<Void, Throwable> {
 
         private UUID jobId;
 
@@ -219,12 +214,21 @@ public class JobContextService extends AbstractLifecycleComponent<JobContextServ
             }
         }
 
-        public void onSuccess(@Nullable Object result) {
+        public void onSuccess() {
             remove(null);
         }
 
         public void onFailure(@Nonnull Throwable throwable) {
             remove(throwable);
+        }
+
+        @Override
+        public void accept(Void aVoid, Throwable t) {
+            if (t == null) {
+                onSuccess();
+            } else {
+                onFailure(t);
+            }
         }
     }
 

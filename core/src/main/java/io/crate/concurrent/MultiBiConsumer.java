@@ -29,16 +29,16 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
 /**
- * a FutureCompleteConsumer that can be called multiple times and will call the finalConsumer once numCalls has been made.
+ * a BiConsumer that can be called multiple times and will call the consumer once numCalls has been made.
  */
-public class MultiFutureCompleteConsumer<T> implements BiConsumer<T, Throwable> {
+public class MultiBiConsumer<T> implements BiConsumer<T, Throwable> {
 
     private final AtomicInteger counter;
     private final List<T> results;
-    private final FutureCompleteConsumer<List<T>> finalConsumer;
+    private final BiConsumer<List<T>, Throwable> finalConsumer;
     private final AtomicReference<Throwable> lastFailure = new AtomicReference<>();
 
-    public MultiFutureCompleteConsumer(int numCalls, FutureCompleteConsumer<List<T>> finalConsumer) {
+    public MultiBiConsumer(int numCalls, BiConsumer<List<T>, Throwable> finalConsumer) {
         this.finalConsumer = finalConsumer;
         results = new ArrayList<>(numCalls);
         counter = new AtomicInteger(numCalls);
@@ -46,10 +46,10 @@ public class MultiFutureCompleteConsumer<T> implements BiConsumer<T, Throwable> 
 
     @Override
     public void accept(T result, Throwable throwable) {
-        if (throwable != null) {
-            onFailure(throwable);
-        } else {
+        if (throwable == null) {
             onSuccess(result);
+        } else {
+            onFailure(throwable);
         }
     }
 
@@ -68,11 +68,7 @@ public class MultiFutureCompleteConsumer<T> implements BiConsumer<T, Throwable> 
     private void countdown() {
         if (counter.decrementAndGet() == 0) {
             Throwable throwable = lastFailure.get();
-            if (throwable == null) {
-                finalConsumer.onSuccess(results);
-            } else {
-                finalConsumer.onFailure(throwable);
-            }
+            finalConsumer.accept(results, throwable);
         }
     }
 }

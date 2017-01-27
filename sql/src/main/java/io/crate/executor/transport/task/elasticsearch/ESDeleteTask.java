@@ -24,7 +24,6 @@ package io.crate.executor.transport.task.elasticsearch;
 import io.crate.Constants;
 import io.crate.analyze.where.DocKeys;
 import io.crate.concurrent.CompletableFutures;
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Row;
 import io.crate.core.collections.Row1;
 import io.crate.exceptions.Exceptions;
@@ -43,8 +42,6 @@ import org.elasticsearch.action.delete.TransportDeleteAction;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.index.engine.VersionConflictEngineException;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -120,10 +117,13 @@ public class ESDeleteTask extends JobTask {
             rowReceiver.fail(throwable);
             return;
         }
-        result.whenComplete(FutureCompleteConsumer.build(
-            (@Nullable Long futureResult) -> RowReceivers.sendOneRow(rowReceiver, new Row1(futureResult)),
-            (@Nonnull Throwable t) -> rowReceiver.fail(t)
-        ));
+        result.whenComplete((Long futureResult, Throwable t) -> {
+            if (t == null) {
+                RowReceivers.sendOneRow(rowReceiver, new Row1(futureResult));
+            } else {
+                rowReceiver.fail(t);
+            }
+        });
     }
 
 

@@ -53,7 +53,7 @@ public class BaseResultReceiver implements ResultReceiver {
     }
 
     @Override
-    public CompletableFuture<?> completionFuture() {
+    public CompletableFuture<Void> completionFuture() {
         return completionFuture;
     }
 }

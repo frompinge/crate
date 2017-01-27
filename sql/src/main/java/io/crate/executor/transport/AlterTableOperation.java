@@ -36,8 +36,7 @@ import io.crate.analyze.AlterTableAnalyzedStatement;
 import io.crate.analyze.PartitionedTableParameterInfo;
 import io.crate.analyze.TableParameter;
 import io.crate.concurrent.CompletableFutures;
-import io.crate.concurrent.FutureCompleteConsumer;
-import io.crate.concurrent.MultiFutureCompleteConsumer;
+import io.crate.concurrent.MultiBiConsumer;
 import io.crate.core.collections.Row;
 import io.crate.exceptions.AlterTableAliasException;
 import io.crate.metadata.PartitionName;
@@ -70,6 +69,7 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
 
 @Singleton
 public class AlterTableOperation {
@@ -318,14 +318,15 @@ public class AlterTableOperation {
     }
 
     private void applyMultiFutureCallback(final CompletableFuture<?> result, List<CompletableFuture<Long>> futures) {
-        FutureCompleteConsumer<List<Long>> finalConsumer = FutureCompleteConsumer.build(
-            (@Nullable List<Long> receivedResult) -> {
+        BiConsumer<List<Long>, Throwable> finalConsumer = (List<Long> receivedResult, Throwable t) -> {
+            if (t == null) {
                 result.complete(null);
-            },
-            (@Nonnull Throwable t) -> result.completeExceptionally(t)
-        );
+            } else {
+                result.completeExceptionally(t);
+            }
+        };
 
-        MultiFutureCompleteConsumer<Long> consumer = new MultiFutureCompleteConsumer(futures.size(), finalConsumer);
+        MultiBiConsumer<Long> consumer = new MultiBiConsumer(futures.size(), finalConsumer);
         for (CompletableFuture<Long> future : futures) {
             future.whenComplete(consumer);
         }

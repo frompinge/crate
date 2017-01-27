@@ -29,7 +29,6 @@ import com.carrotsearch.hppc.IntSet;
 import com.carrotsearch.hppc.cursors.IntCursor;
 import com.carrotsearch.hppc.cursors.IntObjectCursor;
 import io.crate.analyze.symbol.Symbol;
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Bucket;
 import io.crate.core.collections.Row;
 import io.crate.metadata.Functions;
@@ -41,8 +40,6 @@ import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -183,25 +180,24 @@ public class FetchProjector extends AbstractProjector {
             } else {
                 final String nodeId = entry.getKey();
                 CompletableFuture<IntObjectMap<? extends Bucket>> future = fetchOperation.fetch(nodeId, toFetch, isLast);
-
-                future.whenComplete(FutureCompleteConsumer.build(
-                    (@Nullable IntObjectMap<? extends Bucket> result) -> {
-                        if (result != null) {
-                            for (IntObjectCursor<? extends Bucket> cursor : result) {
-                                ReaderBucket readerBucket = context.getReaderBucket(cursor.key);
-                                readerBucket.fetched(cursor.value);
+                future.whenComplete((IntObjectMap<? extends Bucket> result, Throwable t) -> {
+                        if (t == null) {
+                            if (result != null) {
+                                for (IntObjectCursor<? extends Bucket> cursor : result) {
+                                    ReaderBucket readerBucket = context.getReaderBucket(cursor.key);
+                                    readerBucket.fetched(cursor.value);
+                                }
                             }
+                            if (remainingRequests.decrementAndGet() == 0) {
+                                resultExecutor.execute(new SendToDownstreamRunnable(isLast));
+                            }
+                        } else {
+                            LOGGER.error("NodeFetchRequest failed on node {}", t, nodeId);
+                            remainingRequests.decrementAndGet();
+                            fail(t);
                         }
-                        if (remainingRequests.decrementAndGet() == 0) {
-                            resultExecutor.execute(new SendToDownstreamRunnable(isLast));
-                        }
-                    },
-                    (@Nonnull Throwable t) -> {
-                        LOGGER.error("NodeFetchRequest failed on node {}", t, nodeId);
-                        remainingRequests.decrementAndGet();
-                        fail(t);
                     }
-                ));
+                );
             }
         }
     }

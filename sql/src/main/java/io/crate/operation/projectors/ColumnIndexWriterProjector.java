@@ -24,7 +24,6 @@ package io.crate.operation.projectors;
 import com.google.common.base.MoreObjects;
 import io.crate.analyze.symbol.Assignments;
 import io.crate.analyze.symbol.Symbol;
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Row;
 import io.crate.executor.transport.ShardUpsertRequest;
 import io.crate.executor.transport.TransportActionProvider;
@@ -122,9 +121,7 @@ public class ColumnIndexWriterProjector extends AbstractProjector {
     public void downstream(RowReceiver rowReceiver) {
         super.downstream(rowReceiver);
         BulkProcessorFutureCallback bulkProcessorFutureCallback = new BulkProcessorFutureCallback(failed, rowReceiver);
-        bulkShardProcessor.result().whenComplete(FutureCompleteConsumer.build(
-            bulkProcessorFutureCallback::onSuccess, bulkProcessorFutureCallback::onFailure
-        ));
+        bulkShardProcessor.result().whenComplete(bulkProcessorFutureCallback);
     }
 
     @Override

@@ -32,7 +32,6 @@ import io.crate.analyze.ParameterContext;
 import io.crate.analyze.relations.AnalyzedRelation;
 import io.crate.analyze.symbol.Field;
 import io.crate.analyze.symbol.Symbols;
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Row;
 import io.crate.core.collections.RowN;
 import io.crate.exceptions.Exceptions;
@@ -167,9 +166,7 @@ public class SimplePortal extends AbstractPortal {
         }
         statsTables.logExecutionStart(jobId, query);
         StatsTablesUpdateListener statsTablesUpdateListener = new StatsTablesUpdateListener(jobId, statsTables);
-        resultReceiver.completionFuture().whenComplete(FutureCompleteConsumer.build(
-            statsTablesUpdateListener::onSuccess, statsTablesUpdateListener::onFailure
-        ));
+        resultReceiver.completionFuture().whenComplete(statsTablesUpdateListener);
 
         if (!analysis.analyzedStatement().isWriteOperation()) {
             resultReceiver = new ResultReceiverRetryWrapper(
@@ -226,6 +223,7 @@ public class SimplePortal extends AbstractPortal {
         }
         return analysis.rootRelation().fields();
     }
+
     private static class ResultReceiverRetryWrapper implements ResultReceiver {
 
         private final ResultReceiver delegate;

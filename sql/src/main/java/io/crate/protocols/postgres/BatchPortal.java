@@ -49,8 +49,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import static io.crate.concurrent.FutureCompleteConsumer.build;
-
 class BatchPortal extends AbstractPortal {
 
     private final List<List<Object>> batchParams = new ArrayList<>();
@@ -140,12 +138,10 @@ class BatchPortal extends AbstractPortal {
             ResultReceiver resultReceiver = resultReceivers.get(i);
             statsTables.logExecutionStart(jobId, stmt);
             StatsTablesUpdateListener statsTablesUpdateListener = new StatsTablesUpdateListener(jobId, statsTables);
-            resultReceiver.completionFuture().whenComplete(build(
-                statsTablesUpdateListener::onSuccess, statsTablesUpdateListener::onFailure
-            ));
-            resultReceiver.completionFuture().whenComplete(build(
-                completionCallback::onSuccess, completionCallback::onFailure
-            ));
+
+            resultReceiver.completionFuture().whenComplete(statsTablesUpdateListener);
+            resultReceiver.completionFuture().whenComplete(completionCallback);
+
             RowReceiver rowReceiver = new RowReceiverToResultReceiver(resultReceiver, 0);
             portalContext.getExecutor().execute(plan, rowReceiver, new RowN(batchParams.toArray()));
         }

@@ -24,7 +24,6 @@ package io.crate.jobs;
 import com.carrotsearch.hppc.IntArrayList;
 import com.carrotsearch.hppc.cursors.IntCursor;
 import io.crate.concurrent.CompletionListenable;
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.exceptions.ContextMissingException;
 import io.crate.exceptions.Exceptions;
 import io.crate.operation.collect.stats.StatsTables;
@@ -42,6 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
 
 public class JobExecutionContext implements CompletionListenable {
 
@@ -54,7 +54,7 @@ public class JobExecutionContext implements CompletionListenable {
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final String coordinatorNodeId;
     private final StatsTables statsTables;
-    private final CompletableFuture finishedFuture = new CompletableFuture();
+    private final CompletableFuture<Void> finishedFuture = new CompletableFuture();
     private final AtomicBoolean killSubContextsOngoing = new AtomicBoolean(false);
     private final Collection<String> participatedNodes;
     private volatile Throwable failure;
@@ -112,11 +112,7 @@ public class JobExecutionContext implements CompletionListenable {
             int subContextId = context.id();
             orderedContextIds.add(subContextId);
 
-            RemoveSubContextListener removeSubContextListener = new RemoveSubContextListener(subContextId);
-            FutureCompleteConsumer<CompletionState> removeContextCompleteAction = FutureCompleteConsumer.build(
-                removeSubContextListener::onSuccess, removeSubContextListener::onFailure
-            );
-            context.completionFuture().whenComplete(removeContextCompleteAction);
+            context.completionFuture().whenComplete(new RemoveSubContextListener(subContextId));
 
             ExecutionSubContext existingContext = subContexts.put(subContextId, context);
             if (existingContext != null) {
@@ -220,7 +216,7 @@ public class JobExecutionContext implements CompletionListenable {
     }
 
     @Override
-    public CompletableFuture<?> completionFuture() {
+    public CompletableFuture<Void> completionFuture() {
         return finishedFuture;
     }
 
@@ -233,7 +229,7 @@ public class JobExecutionContext implements CompletionListenable {
                '}';
     }
 
-    private class RemoveSubContextListener {
+    private class RemoveSubContextListener implements BiConsumer<CompletionState, Throwable> {
 
         private final int id;
 
@@ -268,6 +264,15 @@ public class JobExecutionContext implements CompletionListenable {
                 for (ExecutionSubContext subContext : subContexts.values()) {
                     subContext.kill(t);
                 }
+            }
+        }
+
+        @Override
+        public void accept(CompletionState completionState, Throwable throwable) {
+            if (throwable == null) {
+                onSuccess(completionState);
+            } else {
+                onFailure(throwable);
             }
         }
     }

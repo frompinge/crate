@@ -28,8 +28,9 @@ import io.crate.operation.collect.stats.StatsTables;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
-public class StatsTablesUpdateListener {
+public class StatsTablesUpdateListener implements BiConsumer<Object, Throwable> {
 
     private final UUID jobId;
     private final StatsTables statsTables;
@@ -39,11 +40,20 @@ public class StatsTablesUpdateListener {
         this.statsTables = statsTables;
     }
 
-    public void onSuccess(@Nullable Object result) {
+    @Override
+    public void accept(Object o, Throwable t) {
+        if (t == null) {
+            onSuccess(o);
+        } else {
+            onFailure(t);
+        }
+    }
+
+    private void onSuccess(@Nullable Object result) {
         statsTables.logExecutionEnd(jobId, null);
     }
 
-    public void onFailure(@Nonnull Throwable t) {
+    private void onFailure(@Nonnull Throwable t) {
         statsTables.logExecutionEnd(jobId, Exceptions.messageOf(t));
     }
 }

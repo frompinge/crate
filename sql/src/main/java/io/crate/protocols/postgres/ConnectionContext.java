@@ -28,7 +28,6 @@ import io.crate.action.sql.ResultReceiver;
 import io.crate.action.sql.SQLOperations;
 import io.crate.analyze.symbol.Field;
 import io.crate.analyze.symbol.Symbols;
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.protocols.postgres.types.PGType;
 import io.crate.protocols.postgres.types.PGTypes;
 import io.crate.types.DataType;
@@ -43,6 +42,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.function.BiConsumer;
 
 import static io.crate.protocols.postgres.ConnectionContext.State.STARTUP_HEADER;
 import static io.crate.protocols.postgres.FormatCodes.getFormatCode;
@@ -205,18 +205,27 @@ class ConnectionContext {
         return sqlOperations.createSession(defaultSchema, Option.NONE, 0);
     }
 
-    private static class ReadyForQueryCallback {
+    private static class ReadyForQueryCallback implements BiConsumer<Object, Throwable> {
         private final Channel channel;
 
         private ReadyForQueryCallback(Channel channel) {
             this.channel = channel;
         }
 
-        public void onSuccess(@Nullable Object result) {
+        @Override
+        public void accept(Object o, Throwable t) {
+            if (t == null) {
+                onSuccess(o);
+            } else {
+                onFailure(t);
+            }
+        }
+
+        private void onSuccess(@Nullable Object result) {
             Messages.sendReadyForQuery(channel);
         }
 
-        public void onFailure(@Nonnull Throwable t) {
+        private void onFailure(@Nonnull Throwable t) {
             Messages.sendReadyForQuery(channel);
         }
     }
@@ -342,8 +351,8 @@ class ConnectionContext {
 
     /**
      * Flush Message
-     *  | 'H' | int32 len
-     *
+     * | 'H' | int32 len
+     * <p>
      * Flush forces the backend to deliver any data pending in it's output buffers.
      */
     private void handleFlush(Channel channel) {
@@ -524,9 +533,7 @@ class ConnectionContext {
         }
         try {
             ReadyForQueryCallback readyForQueryCallback = new ReadyForQueryCallback(channel);
-            session.sync().whenComplete(FutureCompleteConsumer.build(
-               readyForQueryCallback::onSuccess, readyForQueryCallback::onFailure
-            ));
+            session.sync().whenComplete(readyForQueryCallback);
         } catch (Throwable t) {
             Messages.sendErrorResponse(channel, t);
             Messages.sendReadyForQuery(channel);
@@ -566,9 +573,7 @@ class ConnectionContext {
                 session.execute("", 0, resultSetReceiver);
             }
             ReadyForQueryCallback readyForQueryCallback = new ReadyForQueryCallback(channel);
-            session.sync().whenComplete(FutureCompleteConsumer.build(
-                readyForQueryCallback::onSuccess, readyForQueryCallback::onFailure
-            ));
+            session.sync().whenComplete(readyForQueryCallback);
         } catch (Throwable t) {
             session.clearState();
             Messages.sendErrorResponse(channel, t);

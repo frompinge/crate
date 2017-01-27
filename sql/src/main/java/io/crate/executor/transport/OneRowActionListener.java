@@ -29,9 +29,9 @@ import io.crate.operation.projectors.RowReceiver;
 import org.elasticsearch.action.ActionListener;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import java.util.function.BiConsumer;
 
-public class OneRowActionListener<Response> implements ActionListener<Response> {
+public class OneRowActionListener<Response> implements ActionListener<Response>, BiConsumer<Response, Throwable> {
 
     private final RowReceiver rowReceiver;
     private final Function<? super Response, ? extends Row> toRowFunction;
@@ -47,12 +47,17 @@ public class OneRowActionListener<Response> implements ActionListener<Response> 
         rowReceiver.finish(RepeatHandle.UNSUPPORTED);
     }
 
-    public void onSuccess(@Nullable Response result) {
-        onResponse(result);
-    }
-
     @Override
     public void onFailure(@Nonnull Throwable e) {
         rowReceiver.fail(e);
+    }
+
+    @Override
+    public void accept(Response response, Throwable t) {
+        if (t == null) {
+            onResponse(response);
+        } else {
+            onFailure(t);
+        }
     }
 }

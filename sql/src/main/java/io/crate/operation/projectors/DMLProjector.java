@@ -22,7 +22,6 @@
 
 package io.crate.operation.projectors;
 
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Row;
 import io.crate.executor.transport.ShardRequest;
 import io.crate.operation.collect.CollectExpression;
@@ -72,9 +71,7 @@ class DMLProjector<Request extends ShardRequest> extends AbstractProjector {
     public void downstream(RowReceiver rowReceiver) {
         super.downstream(rowReceiver);
         BulkProcessorFutureCallback bulkProcessorFutureCallback = new BulkProcessorFutureCallback(failed, rowReceiver);
-        bulkShardProcessor.result().whenComplete(FutureCompleteConsumer.build(
-            bulkProcessorFutureCallback::onSuccess, bulkProcessorFutureCallback::onFailure
-        ));
+        bulkShardProcessor.result().whenComplete(bulkProcessorFutureCallback);
     }
 
     @Override

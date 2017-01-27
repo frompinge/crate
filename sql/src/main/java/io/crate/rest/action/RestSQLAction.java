@@ -26,7 +26,6 @@ import io.crate.action.sql.*;
 import io.crate.action.sql.parser.SQLXContentSourceContext;
 import io.crate.action.sql.parser.SQLXContentSourceParser;
 import io.crate.analyze.symbol.Field;
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.exceptions.SQLParseException;
 import io.crate.types.DataType;
 import org.elasticsearch.client.Client;
@@ -35,8 +34,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.rest.*;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.*;
@@ -153,8 +150,8 @@ public class RestSQLAction extends BaseRestHandler {
                 throw new UnsupportedOperationException(
                     "Bulk operations for statements that return result sets is not supported");
             }
-            session.sync().whenComplete(FutureCompleteConsumer.build(
-                (@Nullable Object result) -> {
+            session.sync().whenComplete((Object result, Throwable t) -> {
+                if (t == null) {
                     try {
                         XContentBuilder builder = ResultToXContentBuilder.builder(channel)
                             .cols(Collections.<Field>emptyList())
@@ -164,11 +161,10 @@ public class RestSQLAction extends BaseRestHandler {
                     } catch (Throwable e) {
                         errorResponse(channel, e);
                     }
-                },
-                (@Nonnull Throwable t) -> {
+                } else {
                     errorResponse(channel, t);
                 }
-            ));
+            });
         } catch (Throwable t) {
             errorResponse(channel, t);
         }

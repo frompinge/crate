@@ -21,13 +21,11 @@
 
 package io.crate.jobs;
 
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.operation.join.NestedLoopOperation;
 import io.crate.operation.projectors.ListenableRowReceiver;
 import io.crate.planner.node.dql.join.NestedLoopPhase;
 import org.elasticsearch.common.logging.ESLogger;
 
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 public class NestedLoopContext extends AbstractExecutionSubContext implements DownstreamExecutionSubContext {
@@ -55,10 +53,13 @@ public class NestedLoopContext extends AbstractExecutionSubContext implements Do
         leftRowReceiver = nestedLoopOperation.leftRowReceiver();
         rightRowReceiver = nestedLoopOperation.rightRowReceiver();
 
-        nestedLoopOperation.completionFuture().whenComplete(FutureCompleteConsumer.build(
-            (@Nullable Object result) -> future.close(null),
-            (@Nonnull Throwable t) -> future.close(t)
-        ));
+        nestedLoopOperation.completionFuture().whenComplete((Object result, Throwable t) -> {
+            if (t == null) {
+                future.close(null);
+            } else {
+                future.close(t);
+            }
+        });
     }
 
     @Override

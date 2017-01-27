@@ -23,7 +23,6 @@ package io.crate.jobs;
 
 import io.crate.Streamer;
 import io.crate.breaker.RamAccountingContext;
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Row1;
 import io.crate.core.collections.SingleRowBucket;
 import io.crate.operation.PageDownstream;
@@ -37,7 +36,6 @@ import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-import javax.annotation.Nonnull;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.Matchers.is;
@@ -84,10 +82,13 @@ public class PageDownstreamContextTest extends CrateUnitTest {
 
         final AtomicReference<Throwable> throwable = new AtomicReference<>();
 
-        ctx.completionFuture().whenComplete(FutureCompleteConsumer.build(
-            (r) -> {},
-            (@Nonnull Throwable t) -> assertTrue(throwable.compareAndSet(null, t))
-        ));
+        ctx.completionFuture().whenComplete((r, t) -> {
+            if (t != null) {
+                assertTrue(throwable.compareAndSet(null, t));
+            } else {
+                fail("Expected exception");
+            }
+        });
 
         ctx.kill(null);
         assertThat(throwable.get(), Matchers.instanceOf(InterruptedException.class));

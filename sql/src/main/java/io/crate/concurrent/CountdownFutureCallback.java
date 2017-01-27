@@ -23,16 +23,16 @@
 package io.crate.concurrent;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 
 /**
  * A future acting as a FutureCallback. It is set when once numCalls have been made to the callback.
  * If a failure occurs the last failure will be used as exception. The result is always null.
  */
-public class CountdownFutureCallback extends CompletableFuture<Void> {
+public class CountdownFutureCallback extends CompletableFuture<Void> implements BiConsumer<Object, Throwable> {
 
     private final AtomicInteger counter;
     private final AtomicReference<Throwable> lastFailure = new AtomicReference<>();
@@ -41,7 +41,7 @@ public class CountdownFutureCallback extends CompletableFuture<Void> {
         counter = new AtomicInteger(numCalls);
     }
 
-    public void onSuccess(@Nullable Object result) {
+    public void onSuccess() {
         countdown();
     }
 
@@ -58,6 +58,15 @@ public class CountdownFutureCallback extends CompletableFuture<Void> {
             } else {
                 completeExceptionally(throwable);
             }
+        }
+    }
+
+    @Override
+    public void accept(Object o, Throwable t) {
+        if (t == null) {
+            onSuccess();
+        } else {
+            onFailure(t);
         }
     }
 }

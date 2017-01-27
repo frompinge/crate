@@ -24,7 +24,6 @@ package io.crate.executor.task;
 import com.google.common.base.Function;
 import io.crate.action.sql.DDLStatementDispatcher;
 import io.crate.analyze.AnalyzedStatement;
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Row;
 import io.crate.core.collections.Row1;
 import io.crate.executor.JobTask;
@@ -57,9 +56,7 @@ public class DDLTask extends JobTask {
                 return new Row1(input == null ? -1 : input);
             }
         });
-        future.whenComplete(FutureCompleteConsumer.build(
-           responseOneRowActionListener::onSuccess, responseOneRowActionListener::onFailure
-        ));
+        future.whenComplete(responseOneRowActionListener);
     }
 
 }

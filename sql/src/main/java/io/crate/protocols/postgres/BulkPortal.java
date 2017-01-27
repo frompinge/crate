@@ -28,7 +28,6 @@ import io.crate.analyze.Analysis;
 import io.crate.analyze.ParameterContext;
 import io.crate.analyze.symbol.Field;
 import io.crate.concurrent.CompletableFutures;
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Row;
 import io.crate.core.collections.RowN;
 import io.crate.core.collections.Rows;
@@ -139,30 +138,30 @@ class BulkPortal extends AbstractPortal {
         final CompletableFuture<Void> future = new CompletableFuture<>();
         List<CompletableFuture<Long>> futures = executor.executeBulk(plan);
         CompletableFuture<List<Long>> allFuturesCollected = CompletableFutures.allSuccessfulOrFailedFuture(futures);
-        allFuturesCollected.whenComplete(FutureCompleteConsumer.build(
-            (@Nullable List<Long> result) -> {
-                assert result != null && result.size() == resultReceivers.size()
-                    : "number of result must match number of rowReceivers";
+        allFuturesCollected.whenComplete((List<Long> result, Throwable t) -> {
+                if (t == null) {
+                    assert result != null && result.size() == resultReceivers.size()
+                        : "number of result must match number of rowReceivers";
 
-                Long[] cells = new Long[1];
-                RowN row = new RowN(cells);
-                for (int i = 0; i < result.size(); i++) {
-                    cells[0] = result.get(i);
-                    ResultReceiver resultReceiver = resultReceivers.get(i);
-                    resultReceiver.setNextRow(row);
-                    resultReceiver.allFinished();
+                    Long[] cells = new Long[1];
+                    RowN row = new RowN(cells);
+                    for (int i = 0; i < result.size(); i++) {
+                        cells[0] = result.get(i);
+                        ResultReceiver resultReceiver = resultReceivers.get(i);
+                        resultReceiver.setNextRow(row);
+                        resultReceiver.allFinished();
+                    }
+                    future.complete(null);
+                    statsTables.logExecutionEnd(jobId, null);
+                } else {
+                    for (ResultReceiver resultReceiver : resultReceivers) {
+                        resultReceiver.fail(t);
+                    }
+                    future.completeExceptionally(t);
+                    statsTables.logExecutionEnd(jobId, Exceptions.messageOf(t));
                 }
-                future.complete(null);
-                statsTables.logExecutionEnd(jobId, null);
-            },
-            (Throwable t) -> {
-                for (ResultReceiver resultReceiver : resultReceivers) {
-                    resultReceiver.fail(t);
-                }
-                future.completeExceptionally(t);
-                statsTables.logExecutionEnd(jobId, Exceptions.messageOf(t));
             }
-        ));
+        );
         return future;
     }
 }

@@ -26,7 +26,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Throwables;
 import io.crate.action.sql.*;
 import io.crate.analyze.symbol.Field;
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Row;
 import io.crate.exceptions.Exceptions;
 import io.crate.executor.BytesRefUtils;
@@ -213,10 +212,13 @@ public class SQLTransportExecutor {
                 throw new UnsupportedOperationException(
                     "Bulk operations for statements that return result sets is not supported");
             }
-            session.sync().whenComplete(FutureCompleteConsumer.build(
-                (@Nullable Object result) -> listener.onResponse(new SQLBulkResponse(results)),
-                (@Nonnull Throwable t) -> listener.onFailure(Exceptions.createSQLActionException(t))
-            ));
+            session.sync().whenComplete((Object result, Throwable t) -> {
+                if (t == null) {
+                    listener.onResponse(new SQLBulkResponse(results));
+                } else {
+                    listener.onFailure(Exceptions.createSQLActionException(t));
+                }
+            });
         } catch (Throwable t) {
             listener.onFailure(Exceptions.createSQLActionException(t));
         }

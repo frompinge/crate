@@ -23,7 +23,6 @@ package io.crate.executor.transport.task;
 
 import io.crate.Constants;
 import io.crate.concurrent.CompletableFutures;
-import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Row;
 import io.crate.core.collections.Row1;
 import io.crate.executor.Executor;
@@ -52,7 +51,6 @@ import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndexAlreadyExistsException;
 
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -154,10 +152,13 @@ public class UpsertByIdTask extends JobTask {
 
     private void executeUpsertRequest(final UpsertById.Item item, final CompletableFuture<Long> future) {
         CompletableFuture<Long> f = executeUpsertRequest(item);
-        f.whenComplete(FutureCompleteConsumer.build(
-            (@Nullable Long result) -> future.complete(result),
-            (@Nonnull Throwable t) -> future.completeExceptionally(t)
-        ));
+        f.whenComplete((Long result, Throwable t) -> {
+            if (t == null) {
+                future.complete(result);
+            } else {
+                future.completeExceptionally(t);
+            }
+        });
     }
 
     private CompletableFuture<Long> executeUpsertRequest(final UpsertById.Item item) {
@@ -242,8 +243,8 @@ public class UpsertByIdTask extends JobTask {
             final CompletableFuture<Long> futureResult = new CompletableFuture<>();
             List<CompletableFuture<Long>> resultList = new ArrayList<>(1);
             resultList.add(futureResult);
-            bulkShardProcessor.result().whenComplete(FutureCompleteConsumer.build(
-                (@Nullable BitSet result) -> {
+            bulkShardProcessor.result().whenComplete((BitSet result, Throwable t) -> {
+                if (t == null) {
                     if (result == null) {
                         // unknown rowcount
                         futureResult.complete(Executor.ROWCOUNT_UNKNOWN);
@@ -251,12 +252,11 @@ public class UpsertByIdTask extends JobTask {
                         futureResult.complete((long) result.cardinality());
                     }
                     bulkShardProcessorContext.close();
-                },
-                (@Nonnull Throwable t) -> {
+                } else {
                     futureResult.completeExceptionally(t);
                     bulkShardProcessorContext.close();
                 }
-            ));
+            });
             return resultList;
         } else {
             final int numResults = upsertById.numBulkResponses();
@@ -266,8 +266,8 @@ public class UpsertByIdTask extends JobTask {
                 resultList.add(new CompletableFuture<>());
             }
 
-            bulkShardProcessor.result().whenComplete(FutureCompleteConsumer.build(
-                (@Nullable BitSet result) -> {
+            bulkShardProcessor.result().whenComplete((BitSet result, Throwable t) -> {
+                if (t == null) {
                     if (result == null) {
                         setAllToFailed(null, resultList);
                         return;
@@ -295,10 +295,11 @@ public class UpsertByIdTask extends JobTask {
                     }
 
                     bulkShardProcessorContext.close();
-                }, (@Nonnull Throwable t) -> {
+                } else {
                     setAllToFailed(t, resultList);
                     bulkShardProcessorContext.close();
-                }));
+                }
+            });
             return resultList;
         }
     }
