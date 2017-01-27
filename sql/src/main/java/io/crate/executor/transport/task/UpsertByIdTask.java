@@ -32,8 +32,8 @@ import io.crate.executor.transport.ShardUpsertRequest;
 import io.crate.jobs.*;
 import io.crate.metadata.PartitionName;
 import io.crate.metadata.settings.CrateSettings;
-import io.crate.operation.projectors.RepeatHandle;
 import io.crate.operation.projectors.RowReceiver;
+import io.crate.operation.projectors.RowReceivers;
 import io.crate.planner.node.dml.UpsertById;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
@@ -76,28 +76,6 @@ public class UpsertByIdTask extends JobTask {
 
     private JobExecutionContext jobExecutionContext;
 
-    public UpsertByIdTask(UpsertById upsertById,
-                          ClusterService clusterService,
-                          IndexNameExpressionResolver indexNameExpressionResolver,
-                          Settings settings,
-                          BulkRequestExecutor<ShardUpsertRequest> transportShardUpsertActionDelegate,
-                          TransportCreateIndexAction transportCreateIndexAction,
-                          TransportBulkCreateIndicesAction transportBulkCreateIndicesAction,
-                          BulkRetryCoordinatorPool bulkRetryCoordinatorPool,
-                          JobContextService jobContextService) {
-        super(upsertById.jobId());
-        this.upsertById = upsertById;
-        this.indexNameExpressionResolver = indexNameExpressionResolver;
-        this.settings = settings;
-        this.transportShardUpsertActionDelegate = transportShardUpsertActionDelegate;
-        this.transportCreateIndexAction = transportCreateIndexAction;
-        this.transportBulkCreateIndicesAction = transportBulkCreateIndicesAction;
-        this.clusterService = clusterService;
-        this.bulkRetryCoordinatorPool = bulkRetryCoordinatorPool;
-        this.jobContextService = jobContextService;
-        autoCreateIndex = new AutoCreateIndex(settings, indexNameExpressionResolver);
-    }
-
     @Override
     public void execute(final RowReceiver rowReceiver, Row parameters) {
         CompletableFuture<Long> result;
@@ -123,13 +101,29 @@ public class UpsertByIdTask extends JobTask {
                 return;
             }
         }
-        result.whenComplete(FutureCompleteConsumer.build(
-            (@Nullable Long receivedResult) -> {
-                rowReceiver.setNextRow(new Row1(receivedResult));
-                rowReceiver.finish(RepeatHandle.UNSUPPORTED);
-            },
-            (@Nonnull Throwable t) -> rowReceiver.fail(t)
-        ));
+        result.whenComplete((count, throwable) -> RowReceivers.sendOneRow(rowReceiver, new Row1(count), throwable));
+    }
+
+    public UpsertByIdTask(UpsertById upsertById,
+                          ClusterService clusterService,
+                          IndexNameExpressionResolver indexNameExpressionResolver,
+                          Settings settings,
+                          BulkRequestExecutor<ShardUpsertRequest> transportShardUpsertActionDelegate,
+                          TransportCreateIndexAction transportCreateIndexAction,
+                          TransportBulkCreateIndicesAction transportBulkCreateIndicesAction,
+                          BulkRetryCoordinatorPool bulkRetryCoordinatorPool,
+                          JobContextService jobContextService) {
+        super(upsertById.jobId());
+        this.upsertById = upsertById;
+        this.indexNameExpressionResolver = indexNameExpressionResolver;
+        this.settings = settings;
+        this.transportShardUpsertActionDelegate = transportShardUpsertActionDelegate;
+        this.transportCreateIndexAction = transportCreateIndexAction;
+        this.transportBulkCreateIndicesAction = transportBulkCreateIndicesAction;
+        this.clusterService = clusterService;
+        this.bulkRetryCoordinatorPool = bulkRetryCoordinatorPool;
+        this.jobContextService = jobContextService;
+        autoCreateIndex = new AutoCreateIndex(settings, indexNameExpressionResolver);
     }
 
     private List<CompletableFuture<Long>> executeBulkShardProcessor() throws Throwable {
