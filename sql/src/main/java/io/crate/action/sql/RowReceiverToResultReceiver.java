@@ -64,7 +64,7 @@ public class RowReceiverToResultReceiver implements RowReceiver {
 
     @Override
     public void finish(RepeatHandle repeatable) {
-        resultReceiver.allFinished();
+        resultReceiver.allFinished(interrupted);
     }
 
     @Override

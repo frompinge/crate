@@ -331,6 +331,27 @@ public class PostgresITest extends SQLTransportIntegrationTest {
     }
 
     @Test
+    public void testCreateNewStatementAfterUnfinishedResultSet() throws Exception {
+        try (Connection conn = DriverManager.getConnection(JDBC_CRATE_URL, properties);
+             Statement statement = conn.createStatement()) {
+            conn.setAutoCommit(false);
+            statement.setFetchSize(2);
+            try (ResultSet resultSet = statement.executeQuery("select mountain from sys.summits")) {
+                resultSet.next();
+                resultSet.next();
+            }
+            conn.setAutoCommit(true);
+            statement.setFetchSize(0);
+            try (ResultSet resultSet = statement.executeQuery("select mountain from sys.summits")) {
+                int rowCount = 0;
+                while (resultSet.next()) {
+                    rowCount++;
+                }
+            }
+        }
+    }
+
+    @Test
     public void testSelectPreparedStatement() throws Exception {
         try (Connection conn = DriverManager.getConnection(JDBC_CRATE_URL, properties)) {
             conn.setAutoCommit(true);

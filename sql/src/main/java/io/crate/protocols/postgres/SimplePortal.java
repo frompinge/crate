@@ -259,8 +259,8 @@ public class SimplePortal extends AbstractPortal {
         }
 
         @Override
-        public void allFinished() {
-            delegate.allFinished();
+        public void allFinished(boolean interrupted) {
+            delegate.allFinished(interrupted);
         }
 
         @Override

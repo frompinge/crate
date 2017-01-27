@@ -215,7 +215,10 @@ class ConnectionContext {
 
         @Override
         public void onSuccess(@Nullable Object result) {
-            Messages.sendReadyForQuery(channel);
+            if (result == null || result.equals(Boolean.FALSE)) {
+                // only send ReadyForQuery if query was not interrupted
+                Messages.sendReadyForQuery(channel);
+            }
         }
 
         @Override

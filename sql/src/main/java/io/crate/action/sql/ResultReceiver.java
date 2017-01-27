@@ -41,7 +41,7 @@ public interface ResultReceiver extends CompletionListenable {
 
     void batchFinished();
 
-    void allFinished();
+    void allFinished(boolean interrupted);
 
     void fail(@Nonnull Throwable t);
 }
