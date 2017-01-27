@@ -41,6 +41,11 @@ public interface ResultReceiver extends CompletionListenable {
 
     void batchFinished();
 
+    /**
+     * Called when receiver finished.
+     * @param interrupted indicates whether the receiver finished because all results were pushed (false)
+     *                    or receiving results was prematurely interrupted (true).
+     */
     void allFinished(boolean interrupted);
 
     void fail(@Nonnull Throwable t);

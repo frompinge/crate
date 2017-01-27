@@ -54,7 +54,15 @@ public interface Portal {
 
     void close();
 
+    /**
+     * Mark portal as finished, so it should not accept any new bind() calls.
+     * This is primarily relevant for the UNNAMED simple portal.
+     */
     void finish();
 
+    /**
+     *
+     * @return boolean whether the portal must not allow new bind() calls without aborting current execution.
+     */
     boolean finished();
 }
