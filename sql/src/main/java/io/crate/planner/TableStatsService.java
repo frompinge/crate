@@ -60,11 +60,9 @@ public class TableStatsService extends AbstractComponent implements Runnable {
     private final Provider<SQLOperations> sqlOperationsProvider;
     private final ThreadPool threadPool;
     private volatile ObjectLongMap<TableIdent> tableStats = null;
-    private TimeValue initialRefreshInterval;
+
     @VisibleForTesting
     ThreadPool.Cancellable refreshScheduledTask = null;
-    @VisibleForTesting
-    TimeValue lastRefreshInterval;
 
     @Inject
     public TableStatsService(Settings settings,
@@ -75,9 +73,17 @@ public class TableStatsService extends AbstractComponent implements Runnable {
         this.threadPool = threadPool;
         this.clusterService = clusterService;
         this.sqlOperationsProvider = sqlOperationsProvider;
-        initialRefreshInterval = extractRefreshInterval(settings);
-        lastRefreshInterval = initialRefreshInterval;
-        refreshScheduledTask = scheduleRefresh(initialRefreshInterval);
+
+        clusterService.getClusterSettings().addSettingsUpdateConsumer(
+            CrateSettings.STATS_SERVICE_REFRESH_INTERVAL.esSetting(), this::updateRefreshInterval);
+        refreshScheduledTask = scheduleRefresh(CrateSettings.STATS_SERVICE_REFRESH_INTERVAL.extractTimeValue(settings));
+    }
+
+    private void updateRefreshInterval(TimeValue newRefreshInterval) {
+        if (refreshScheduledTask != null) {
+            refreshScheduledTask.cancel();
+        }
+        refreshScheduledTask = scheduleRefresh(newRefreshInterval);
     }
 
     @Override
@@ -129,7 +135,7 @@ public class TableStatsService extends AbstractComponent implements Runnable {
         }
     }
 
-    ObjectLongMap<TableIdent> statsFromRows(List<Object[]> rows) {
+    static ObjectLongMap<TableIdent> statsFromRows(List<Object[]> rows) {
         ObjectLongMap<TableIdent> newStats = new ObjectLongHashMap<>(rows.size());
         for (Object[] row : rows) {
             newStats.put(new TableIdent(BytesRefs.toString(row[1]), BytesRefs.toString(row[2])), (long) row[0]);
@@ -161,10 +167,6 @@ public class TableStatsService extends AbstractComponent implements Runnable {
                 ThreadPool.Names.REFRESH);
         }
         return null;
-    }
-
-    private TimeValue extractRefreshInterval(Settings settings) {
-        return CrateSettings.STATS_SERVICE_REFRESH_INTERVAL.extractTimeValue(settings, initialRefreshInterval);
     }
 }
 
