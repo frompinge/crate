@@ -157,13 +157,15 @@ public class ESDeleteTask extends JobTask {
     }
 
     @Override
-    public final CompletableFuture<List<Long>> executeBulk() {
+    public final List<CompletableFuture<Long>> executeBulk() {
         try {
             startContext();
         } catch (Throwable throwable) {
-            return CompletableFutures.failedFuture(throwable);
+            List<CompletableFuture<Long>> failedResult = new ArrayList<>();
+            failedResult.add(CompletableFutures.failedFuture(throwable));
+            return failedResult;
         }
-        return CompletableFutures.successfulAsList(results);
+        return results;
     }
 
 

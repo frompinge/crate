@@ -22,12 +22,9 @@
 
 package io.crate.concurrent;
 
-import com.google.common.util.concurrent.Uninterruptibles;
-
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 public final class CompletableFutures {
 
@@ -42,42 +39,23 @@ public final class CompletableFutures {
      * Equivalent to guava's Futures.allAsList adapted to CompletableFuture
      */
     public static <T> CompletableFuture<List<T>> allSuccessfulOrFailedFuture(List<CompletableFuture<T>> futures) {
-        List<T> collectedResults = new ArrayList<>(futures.size());
-        Throwable futureException = null;
-        for (CompletableFuture<? extends T> future : futures) {
-            try {
-                collectedResults.add(Uninterruptibles.getUninterruptibly(future));
-            } catch (ExecutionException t) {
-                futureException = t.getCause();
-                break;
-            }
-        }
-        if (futureException != null) {
-            CompletableFuture<List<T>> failedFuture = new CompletableFuture<>();
-            failedFuture.completeExceptionally(futureException);
-            return failedFuture;
-        } else {
-            return CompletableFuture.completedFuture(collectedResults);
-        }
-    }
+        CompletableFuture<Void> allOfFuture =
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()]));
 
-    /**
-     * Creates a new {@code CompletableFuture} whose value is a list containing the results of
-     * all successful input futures, maintaining the order of the inputs.
-     * If a future fails or is cancelled, null is returned on its corresponding position.
-     * <p>
-     * Equivalent to guava's Futures.successfulAsList, adapted to CompletableFuture
-     */
-    public static <T> CompletableFuture<List<T>> successfulAsList(List<CompletableFuture<T>> futures) {
-        List<T> collectedResults = new ArrayList<>(futures.size());
-        for (CompletableFuture<? extends T> future : futures) {
-            try {
-                collectedResults.add(Uninterruptibles.getUninterruptibly(future));
-            } catch (ExecutionException e) {
-                collectedResults.add(null);
+        // fail the allOf future as soon as one of the input futures fails
+        futures.stream().forEach(f -> f.whenComplete((r, e) -> {
+            if (e != null) {
+                allOfFuture.completeExceptionally(e);
             }
-        }
-        return CompletableFuture.completedFuture(collectedResults);
+        }));
+
+        CompletableFuture<List<T>> allSuccessfulOrFailedFuture =
+            allOfFuture.thenApply(ignored ->
+                futures.stream().
+                    map(f -> f.join()).
+                    collect(Collectors.toList())
+            );
+        return allSuccessfulOrFailedFuture;
     }
 
     /**

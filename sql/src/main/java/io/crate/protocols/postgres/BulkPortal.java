@@ -27,6 +27,7 @@ import io.crate.action.sql.SessionContext;
 import io.crate.analyze.Analysis;
 import io.crate.analyze.ParameterContext;
 import io.crate.analyze.symbol.Field;
+import io.crate.concurrent.CompletableFutures;
 import io.crate.concurrent.FutureCompleteConsumer;
 import io.crate.core.collections.Row;
 import io.crate.core.collections.RowN;
@@ -136,7 +137,9 @@ class BulkPortal extends AbstractPortal {
     private CompletableFuture<Void> executeBulk(Executor executor, Plan plan, final UUID jobId,
                                                 final StatsTables statsTables) {
         final CompletableFuture<Void> future = new CompletableFuture<>();
-        executor.executeBulk(plan).whenComplete(FutureCompleteConsumer.build(
+        List<CompletableFuture<Long>> futures = executor.executeBulk(plan);
+        CompletableFuture<List<Long>> allFuturesCollected = CompletableFutures.allSuccessfulOrFailedFuture(futures);
+        allFuturesCollected.whenComplete(FutureCompleteConsumer.build(
             (@Nullable List<Long> result) -> {
                 assert result != null && result.size() == resultReceivers.size()
                     : "number of result must match number of rowReceivers";

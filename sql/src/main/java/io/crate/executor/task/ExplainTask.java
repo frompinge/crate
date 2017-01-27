@@ -54,7 +54,7 @@ public class ExplainTask implements Task {
     }
 
     @Override
-    public CompletableFuture<List<Long>> executeBulk() {
+    public List<CompletableFuture<Long>> executeBulk() {
         throw new UnsupportedOperationException("ExplainTask cannot be executed as bulk operation");
     }
 }

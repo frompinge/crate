@@ -26,6 +26,7 @@ import io.crate.executor.Task;
 import io.crate.operation.projectors.RepeatHandle;
 import io.crate.operation.projectors.RowReceiver;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -33,7 +34,6 @@ import java.util.concurrent.CompletableFuture;
 public class NoopTask implements Task {
 
     public static final NoopTask INSTANCE = new NoopTask();
-    private static final CompletableFuture<List<Long>> EMPTY_RESULT = CompletableFuture.completedFuture(Collections.<Long>emptyList());
 
     private NoopTask() {
     }
@@ -44,7 +44,7 @@ public class NoopTask implements Task {
     }
 
     @Override
-    public CompletableFuture<List<Long>> executeBulk() {
-        return EMPTY_RESULT;
+    public List<CompletableFuture<Long>> executeBulk() {
+        return new ArrayList<>();
     }
 }

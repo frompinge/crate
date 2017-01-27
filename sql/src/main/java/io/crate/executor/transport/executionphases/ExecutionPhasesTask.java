@@ -146,7 +146,7 @@ public class ExecutionPhasesTask extends JobTask {
     }
 
     @Override
-    public CompletableFuture<List<Long>> executeBulk() {
+    public List<CompletableFuture<Long>> executeBulk() {
         FluentIterable<NodeOperation> nodeOperations = FluentIterable.from(nodeOperationTrees)
             .transformAndConcat(new Function<NodeOperationTree, Iterable<? extends NodeOperation>>() {
                 @Nullable
@@ -169,9 +169,11 @@ public class ExecutionPhasesTask extends JobTask {
         try {
             setupContext(operationByServer, handlerPhases, handlerReceivers);
         } catch (Throwable throwable) {
-            return CompletableFutures.failedFuture(throwable);
+            List<CompletableFuture<Long>> failedResult = new ArrayList<>();
+            failedResult.add(CompletableFutures.failedFuture(throwable));
+            return failedResult;
         }
-        return CompletableFutures.successfulAsList(results);
+        return results;
     }
 
     private void setupContext(Map<String, Collection<NodeOperation>> operationByServer,

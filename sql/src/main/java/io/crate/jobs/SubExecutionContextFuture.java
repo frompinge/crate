@@ -58,9 +58,9 @@ public class SubExecutionContextFuture extends CompletableFuture<CompletionState
 
     public boolean close(@Nullable Throwable t) {
         if (t == null) {
-            return internalFuture.complete(state);
+            return complete(state);
         } else {
-            return internalFuture.completeExceptionally(t);
+            return completeExceptionally(t);
         }
     }
 
@@ -91,7 +91,7 @@ public class SubExecutionContextFuture extends CompletableFuture<CompletionState
 
     @Override
     public CompletionState join() {
-        return super.join();
+        return internalFuture.join();
     }
 
     @Override
@@ -101,11 +101,13 @@ public class SubExecutionContextFuture extends CompletableFuture<CompletionState
 
     @Override
     public boolean complete(CompletionState value) {
+        super.complete(value);
         return internalFuture.complete(value);
     }
 
     @Override
     public boolean completeExceptionally(Throwable ex) {
+        super.completeExceptionally(ex);
         return internalFuture.completeExceptionally(ex);
     }
 

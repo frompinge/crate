@@ -35,5 +35,5 @@ public interface Executor {
 
     void execute(Plan plan, RowReceiver rowReceiver, Row parameters);
 
-    CompletableFuture<List<Long>> executeBulk(Plan plan);
+    List<CompletableFuture<Long>> executeBulk(Plan plan);
 }

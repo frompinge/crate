@@ -79,47 +79,9 @@ public class CompletableFuturesTest extends CrateUnitTest {
             allSuccessfulResultsFuture.get();
             fail("Expected the resulting future to be completed exceptionally");
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            fail("Expecting an ExecutionExecption");
         } catch (ExecutionException e) {
             assertThat(e.getCause(), is(futureException));
         }
-    }
-
-    @Test
-    public void successfulAsListWithSuccessfulFuturesAsInput() throws Exception {
-        CompletableFuture<String> firstFuture = CompletableFuture.completedFuture("firstResult");
-        CompletableFuture<String> secondFuture = CompletableFuture.completedFuture("secondResult");
-
-        List<CompletableFuture<String>> futures = new ArrayList<>(2);
-        futures.add(firstFuture);
-        futures.add(secondFuture);
-
-        CompletableFuture<List<String>> successfulAsList = CompletableFutures.successfulAsList(futures);
-
-        List<String> results = successfulAsList.get();
-        assertThat(results.size(), is(2));
-        assertThat(results.get(0), is("firstResult"));
-        assertThat(results.get(1), is("secondResult"));
-    }
-
-    @Test
-    public void successfulAsListWithFailedFutureAmongstInputs() throws Exception {
-        CompletableFuture<String> firstFuture = CompletableFuture.completedFuture("firstResult");
-
-        Exception futureException = new Exception("failed");
-        CompletableFuture<String> secondFuture = new CompletableFuture<>();
-        secondFuture.completeExceptionally(futureException);
-
-        List<CompletableFuture<String>> futures = new ArrayList<>(2);
-        futures.add(firstFuture);
-        futures.add(secondFuture);
-
-        CompletableFuture<List<String>> successfulAsList = CompletableFutures.successfulAsList(futures);
-
-        List<String> results = successfulAsList.get();
-        assertThat(results.size(), is(2));
-        assertThat(results.get(0), is("firstResult"));
-        assertThat("Expecting null on the corresponding position of a failed future", results.get(1),
-            nullValue());
     }
 }

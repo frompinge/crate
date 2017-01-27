@@ -147,12 +147,14 @@ public class UpsertByIdTask extends JobTask {
     }
 
     @Override
-    public CompletableFuture<List<Long>> executeBulk() {
+    public List<CompletableFuture<Long>> executeBulk() {
         try {
             List<CompletableFuture<Long>> resultList = executeBulkShardProcessor();
-            return CompletableFutures.allSuccessfulOrFailedFuture(resultList);
+            return resultList;
         } catch (Throwable throwable) {
-            return CompletableFutures.failedFuture(throwable);
+            List<CompletableFuture<Long>> failedResult = new ArrayList<>();
+            failedResult.add(CompletableFutures.failedFuture(throwable));
+            return failedResult;
         }
     }
 
