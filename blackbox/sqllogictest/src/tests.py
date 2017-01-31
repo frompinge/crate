@@ -59,7 +59,7 @@ def test_suite():
         port=CRATE_HTTP_PORT,
         transport_port=CRATE_TRANSPORT_PORT,
         settings={
-            'stats.enabled': 'true',
+            'stats.enabled': True,
             'psql.port': CRATE_PSQL_PORT
         }
     )
